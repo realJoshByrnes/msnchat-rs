@@ -28,6 +28,9 @@ use windows::core::*;
 
 #[macro_use]
 mod com;
+mod hacks;
+
+use hacks::init_hacks;
 
 use crate::com::helpers::set_string_property;
 use crate::com::shared::create_host_wrappers;
@@ -107,6 +110,8 @@ fn main() -> Result<()> {
                 return Err(e);
             }
         };
+
+        init_hacks(); // Initialize any hacks or custom functionality
 
         // Use the correct function to create your host site with the proper vtables
         // Create the wrappers and shared state

@@ -26,7 +26,9 @@ features = [
     "Win32_System_Com",
     "Win32_UI_HiDpi",
     "Win32_UI_Controls",
-    "Win32_System_Variant"
+    "Win32_System_Variant",
+    "Win32_System_Threading",
+    "Win32_System_ProcessStatus"
 ]
 
 [dependencies.windows-core]
