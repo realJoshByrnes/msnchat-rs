@@ -21,8 +21,11 @@ use windows::Win32::Foundation::*;
 use windows::Win32::System::Com::{
     DISPATCH_FLAGS, DISPPARAMS, EXCEPINFO, IDispatch, IDispatch_Vtbl,
 };
-use windows::Win32::System::Ole::{IOleClientSite, IOleInPlaceSite, IOleInPlaceSiteEx};
-use windows::Win32::System::Variant::VARIANT;
+use windows::Win32::System::Ole::{
+    DISPID_AMBIENT_BACKCOLOR, DISPID_AMBIENT_USERMODE, IOleClientSite, IOleInPlaceSite,
+    IOleInPlaceSiteEx,
+};
+use windows::Win32::System::Variant::{VARIANT, VT_BOOL, VT_I4};
 use windows::core::*;
 
 use crate::com::shared::SharedSiteState;
@@ -125,7 +128,7 @@ unsafe extern "system" fn get_ids_of_names(
 }
 unsafe extern "system" fn invoke(
     _this: *mut c_void,
-    _disp_id_member: i32,
+    disp_id_member: i32,
     _riid: *const GUID,
     _lcid: u32,
     _w_flags: DISPATCH_FLAGS,
@@ -134,15 +137,43 @@ unsafe extern "system" fn invoke(
     _p_excep_info: *mut EXCEPINFO,
     _pu_arg_err: *mut u32,
 ) -> HRESULT {
-    println!(
-        // Show all parameters for debugging
-        "IDispatch::Invoke called with dispIdMember: {}, riid: {:?}, lcid: {}, wFlags: {:?}",
-        _disp_id_member,
-        unsafe { *_riid },
-        _lcid,
-        _w_flags,
-    );
-    E_NOTIMPL
+    match disp_id_member {
+        // The ambient background color for all controls, defined by the container.
+        DISPID_AMBIENT_BACKCOLOR => {
+            if !_p_var_result.is_null() {
+                unsafe {
+                    (*(*_p_var_result).Anonymous.Anonymous).vt = VT_I4; // Set the VARIANT type to VT_I4 (OLE_COLOR)
+                    (*(*_p_var_result).Anonymous.Anonymous).Anonymous.lVal = 0; // BLACK. Doesn't seem to do anything.
+                }
+                return S_OK;
+            } else {
+                return E_POINTER;
+            }
+        }
+        // A flag indicating whether the container is in run-mode (TRUE) or design-mode (FALSE).
+        DISPID_AMBIENT_USERMODE => {
+            if !_p_var_result.is_null() {
+                unsafe {
+                    (*(*_p_var_result).Anonymous.Anonymous).vt = VT_BOOL; // Set the VARIANT type to BSTR
+                    (*(*_p_var_result).Anonymous.Anonymous).Anonymous.boolVal = VARIANT_TRUE; // TRUE for run-mode. Doesn't seem to do anything.
+                }
+                return S_OK;
+            } else {
+                return E_POINTER;
+            }
+        }
+        _ => {
+            println!(
+                // Show all parameters for debugging
+                "IDispatch::Invoke called with dispIdMember: {}, riid: {:?}, lcid: {}, wFlags: {:?}",
+                disp_id_member,
+                unsafe { *_riid },
+                _lcid,
+                _w_flags,
+            );
+            E_NOTIMPL
+        }
+    }
 }
 
 pub static IDISPATCH_VTBL: IDispatch_Vtbl = IDispatch_Vtbl {
