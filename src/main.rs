@@ -35,6 +35,8 @@ use crate::com::shared::create_host_wrappers;
 // Define a unique window class name
 const WINDOW_CLASS_NAME: &[u8] = b"MyActiveXHostWindow\0";
 
+static mut IN_PLACE_OBJECT: Option<IOleInPlaceObject> = None;
+
 fn main() -> Result<()> {
     // Initialize COM
     unsafe {
@@ -56,7 +58,7 @@ fn main() -> Result<()> {
         hInstance: h_instance.into(),
         hIcon: HICON(std::ptr::null_mut()), // No icon
         hCursor: unsafe { LoadCursorW(None, IDC_ARROW)? }, // Arrow cursor
-        hbrBackground: HBRUSH(0 as *mut _), // Default window background
+        hbrBackground: unsafe { GetSysColorBrush(COLOR_WINDOW) }, // Default window background
         lpszMenuName: PCSTR(0 as *const u8), // No menu
         lpszClassName: PCSTR(WINDOW_CLASS_NAME.as_ptr()),
         hIconSm: HICON(std::ptr::null_mut()), // No small icon
@@ -73,7 +75,7 @@ fn main() -> Result<()> {
         CreateWindowExA(
             WS_EX_OVERLAPPEDWINDOW,                        // Extended window style
             PCSTR(WINDOW_CLASS_NAME.as_ptr()),             // Window class name
-            PCSTR("Hello, world! (from Rust)\0".as_ptr()), // Window title
+            PCSTR("msnchat-rs by JD\0".as_ptr()), // Window title
             WS_OVERLAPPEDWINDOW,                           // Window style
             100,                                           // X position
             100,                                           // Y position
@@ -131,6 +133,7 @@ fn main() -> Result<()> {
             return Err(Error::from(hr));
         }
         let in_place_object = IOleInPlaceObject::from_raw(in_place_object_ptr as *mut _);
+        IN_PLACE_OBJECT = Some(in_place_object.clone());
         in_place_object.SetObjectRects(&rect, &rect)?; // Pass same rect for position and clip
 
         // Get IDispatch for the control
@@ -141,9 +144,18 @@ fn main() -> Result<()> {
         }
         let dispatch = IDispatch::from_raw(dispatch_ptr as *mut _);
 
-        // Set a property on the control (e.g., URL)
-        let server = "localhost:6667\0";
+        // The OCX won't initialize without server set.
+        let server = "dir.irc7.com:6667\0";
         let hr = set_string_property(&dispatch, "Server", server);
+        if hr.is_err() {
+            eprintln!("Failed to set property on ActiveX control: {:?}", hr);
+        } else {
+            println!("Successfully set property on ActiveX control.");
+        }
+
+        // The OCX will (Null POinter) trying to read this if unset when loading a Whisper Window
+        let base = "\0";
+        let hr = set_string_property(&dispatch, "BaseUrl", base);
         if hr.is_err() {
             eprintln!("Failed to set property on ActiveX control: {:?}", hr);
         } else {
@@ -162,15 +174,6 @@ fn main() -> Result<()> {
 
         let room = "The Lobby\0";
         let hr = set_string_property(&dispatch, "RoomName", room);
-        if hr.is_err() {
-            eprintln!("Failed to set property on ActiveX control: {:?}", hr);
-        } else {
-            println!("Successfully set property on ActiveX control.");
-        }
-
-        // We need this set, otherise the control will crash when it tries to read the value while loading a Whisper Window (MSN Chat Control bug)
-        let base = "\0";
-        let hr = set_string_property(&dispatch, "BaseUrl", base);
         if hr.is_err() {
             eprintln!("Failed to set property on ActiveX control: {:?}", hr);
         } else {
@@ -228,7 +231,8 @@ extern "system" fn wnd_proc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM
                     let _ = GetClientRect(hwnd, &mut r);
                     r
                 };
-                let mut text = *b"Uhh... There should be MSN Chat here, not this text!\0";
+
+                let mut text = *b"Uhh... The MSN Chat Control should be here, not this text!\0";
                 unsafe {
                     DrawTextA(
                         hdc,
@@ -244,6 +248,18 @@ extern "system" fn wnd_proc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM
         WM_DESTROY => {
             // Post a quit message when the window is closed
             unsafe { PostQuitMessage(0) };
+            LRESULT(0)
+        }
+        WM_SIZE => {
+            // Notify the ActiveX control of the new size
+            let mut rect = RECT::default();
+            unsafe {
+                if GetClientRect(hwnd, &mut rect).is_ok() {
+                    if let Some(ref in_place_object) = IN_PLACE_OBJECT {
+                        let _ = in_place_object.SetObjectRects(&rect, &rect);
+                    }
+                }
+            }
             LRESULT(0)
         }
         _ => {
