@@ -3,7 +3,7 @@ name = "msnchat-rs"
 version = "0.1.2"
 edition = "2024"
 
-[target.'cfg(target_os = "windows")'.build-dependencies]
+[build-dependencies]
 winres = "0.1"
 
 [dependencies]
@@ -30,3 +30,9 @@ features = [
 
 [dependencies.windows-core]
 version = "0.61"
+
+[profile.release]
+opt-level = "z"
+lto = true
+panic = "abort"
+codegen-units = 1

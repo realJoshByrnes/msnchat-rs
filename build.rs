@@ -20,6 +20,11 @@ use winres::WindowsResource;
 fn main() {
     embed_manifest();
     copy_dependency("deps/MsnChat45.ocx");
+
+    let profile = std::env::var("PROFILE").unwrap();
+    if profile == "release" {
+        println!("cargo:rustc-link-arg=/EMITPOGOPHASEINFO");
+    }
 }
 
 fn embed_manifest() {
