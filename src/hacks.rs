@@ -29,8 +29,8 @@ pub fn init_hacks() {
             }
         };
 
-        let target_addr = 0x3722E83D as *mut u8;
-        let patch_bytes = [0x75]; // jz -> jnz (Patch to do version reply IF NOT oper)
+        let target_addr = 0x3722E83B as *mut u8;
+        let patch_bytes = [0x90, 0x90, 0x90, 0x90]; // NOP the check that source was OPER
 
         // Disable memory protection
         let mut old_protect = PAGE_PROTECTION_FLAGS(0);
