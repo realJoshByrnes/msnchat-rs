@@ -5,6 +5,7 @@ edition = "2024"
 
 [build-dependencies]
 winres = "0.1"
+static_vcruntime = "2.0"
 
 [dependencies]
 rand = "0.9"
