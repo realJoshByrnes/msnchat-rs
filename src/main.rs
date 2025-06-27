@@ -32,67 +32,11 @@ mod com;
 use crate::com::helpers::set_string_property;
 use crate::com::shared::create_host_wrappers;
 
-// // Define your custom interface (as above)
-// #[interface("12345678-ABCD-EF01-2345-6789ABCDEF00")]
-// unsafe trait IMyInterface: IUnknown {
-//     fn my_method(&self, value: u32) -> HRESULT;
-//     fn get_name(&self, name: *mut BSTR) -> HRESULT;
-// }
-
-// // Your Rust struct that will serve as the COM object.
-// // #[windows::implement] generates the necessary COM infrastructure for it.
-// #[windows::implement(IMyInterface)] // List the interfaces this struct implements
-// struct MyComObject {
-//     // You can have any internal data here.
-//     // windows-rs handles the ref counting and QueryInterface for you.
-//     internal_counter: u32,
-//     object_name: String,
-// }
-
-// // Implement the methods of your interfaces directly on your struct.
-// // The #[windows::implement] macro links these methods to the vtable.
-// impl IMyInterface_Impl for MyComObject {
-//     unsafe fn my_method(&self, value: u32) -> HRESULT {
-//         println!("MyComObject::MyMethod called with value: {}", value);
-//         // You can access and modify internal state:
-//         // self.internal_counter += value; // Note: self is &self, cannot modify directly
-//         // For mutable access, use a RefCell or Mutex if `MyComObject` itself needs to be immutable.
-//         // Or, define methods to take `&mut self` if allowed by the COM interface.
-//         // For simplicity in this example, assume internal state is not mutated by `&self` methods.
-//         S_OK
-//     }
-
-//     unsafe fn get_name(&self, name: *mut BSTR) -> HRESULT {
-//         println!("MyComObject::GetName called.");
-//         // Allocate a BSTR from your internal String and return it.
-//         // The caller is responsible for freeing this BSTR.
-//         let bstr = BSTR::from(&self.object_name);
-//         unsafe {
-//             *name = bstr;
-//         }
-//         S_OK
-//     }
-// }
-
-// fn create_and_use_object() {
-//     // ✅ CORRECT USAGE ✅
-//     // Create your concrete struct, then use .into() to get a ComPtr to the interface.
-//     let my_object: IMyInterface = MyComObject {
-//         internal_counter: 0,
-//         object_name: "Hello from Rust COM".to_string(),
-//     }.into(); // `into()` generates the ComPtr<IMyInterface>
-
-//     // Now you can call methods on `my_object` (which is a ComPtr<IMyInterface>)
-//     unsafe { my_object.my_method(123).ok(); }
-// }
-
 // Define a unique window class name
 const WINDOW_CLASS_NAME: &[u8] = b"MyActiveXHostWindow\0";
 
 fn main() -> Result<()> {
-    // 1. Initialize COM (required for ActiveX controls)
-    // CoInitializeEx(pvReserved: PCVOID, dwCoInit: COINIT)
-    // COINIT_APARTMENTTHREADED is typically used for UI-related COM objects like ActiveX controls.
+    // Initialize COM
     unsafe {
         let hr = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
         if !hr.is_ok() {
@@ -100,7 +44,7 @@ fn main() -> Result<()> {
         }
     }
 
-    // 2. Register the Window Class
+    // Register the Window Class
     let h_instance = unsafe { GetModuleHandleA(None)? };
 
     let wc = WNDCLASSEXA {
@@ -124,7 +68,7 @@ fn main() -> Result<()> {
         }
     }
 
-    // 3. Create the Window
+    // Create the Window
     let hwnd = unsafe {
         CreateWindowExA(
             WS_EX_OVERLAPPEDWINDOW,                        // Extended window style
@@ -147,6 +91,7 @@ fn main() -> Result<()> {
         Err(_e) => return Err(Error::from_win32()),
     };
 
+    // Create the ActiveX Control
     unsafe {
         let ole_object_result = create_activex_control(hwnd, h_instance);
         let embedded_ole_object = match ole_object_result {
@@ -167,7 +112,7 @@ fn main() -> Result<()> {
         // NOTE: KEEP FOREVER!!!
         let wrappers = Box::new(create_host_wrappers(hwnd));
 
-        // Pass wrappers.client_site to SetClientSite (as IOleClientSite)
+        // Pass wrappers.client_site to SetClientSite
         let ole_client_site =
             windows::Win32::System::Ole::IOleClientSite::from_raw(wrappers.client_site as *mut _);
 
@@ -223,7 +168,7 @@ fn main() -> Result<()> {
             println!("Successfully set property on ActiveX control.");
         }
 
-        // We need this set, otherise the control will crash when it tries to read it while loading a Whisper Window
+        // We need this set, otherise the control will crash when it tries to read the value while loading a Whisper Window (MSN Chat Control bug)
         let base = "\0";
         let hr = set_string_property(&dispatch, "BaseUrl", base);
         if hr.is_err() {
@@ -246,7 +191,7 @@ fn main() -> Result<()> {
         let _ = UpdateWindow(hwnd);
     }
 
-    // 5. Message Loop
+    // Message Loop
     let mut msg = MSG::default();
     loop {
         // GetMessageA blocks until a message is available
@@ -261,7 +206,7 @@ fn main() -> Result<()> {
         }
     }
 
-    // 6. Uninitialize COM (important for proper cleanup)
+    // Uninitialize COM (important for proper cleanup)
     unsafe {
         CoUninitialize();
     }
@@ -313,22 +258,18 @@ fn create_activex_control(
     _h_instance: HMODULE,
 ) -> Result<windows::Win32::System::Ole::IOleObject> {
     let clsid_web_browser = &windows::core::GUID::from_u128(
-        // 0x8856F961_340A_11D0_A96B_00C04FD705A2u128,
-        0xF58E1CEF_A068_4c15_BA5E_587CAF3EE8C6,
+        0xF58E1CEF_A068_4c15_BA5E_587CAF3EE8C6, // MSN Chat Control CLSID
     );
 
     // Create an instance of the control
     use windows::Win32::System::Ole::IOleObject;
 
     unsafe {
-        // Create an instance of the WebBrowser control and get IOleObject directly
+        // Create an instance of the MSN Chat control and get IOleObject directly
         let ole_object: IOleObject =
             CoCreateInstance(clsid_web_browser, None, CLSCTX_INPROC_SERVER)?;
 
         print!("Created ActiveX control: {:?}\n", ole_object);
-
-        // At this point, you have an IOleObject pointer, but the control is not yet "sited" in your window.
-        // This is where the real complexity begins.
 
         Ok(ole_object)
     }

@@ -19,6 +19,7 @@ use windows::Win32::Foundation::HWND;
 use crate::com::{
     client_site::MyOleClientSite, control_site::MyOleControlSite, dispatch::MyDispatch,
     inplace_site::MyOleInPlaceSite, inplace_site_ex::MyOleInPlaceSiteEx,
+    service_provider::MyServiceProvider,
 };
 
 #[repr(C)]
@@ -30,6 +31,7 @@ pub struct SharedSiteState {
     pub inplace_site: *mut MyOleInPlaceSite,
     pub inplace_site_ex: *mut MyOleInPlaceSiteEx,
     pub control_site: *mut MyOleControlSite,
+    pub service_provider: *mut MyServiceProvider,
 }
 
 pub struct HostWrappers {
@@ -38,6 +40,7 @@ pub struct HostWrappers {
     pub _inplace_site: *mut MyOleInPlaceSite,
     pub _inplace_site_ex: *mut MyOleInPlaceSiteEx,
     pub _control_site: *mut MyOleControlSite,
+    pub _service_provider: *mut MyServiceProvider,
     pub _shared: *mut SharedSiteState,
 }
 
@@ -50,6 +53,7 @@ pub fn create_host_wrappers(hwnd: HWND) -> HostWrappers {
         inplace_site: std::ptr::null_mut(),
         inplace_site_ex: std::ptr::null_mut(),
         control_site: std::ptr::null_mut(),
+        service_provider: std::ptr::null_mut(),
     }));
     let client_site = Box::into_raw(Box::new(MyOleClientSite {
         lp_vtbl: &crate::com::client_site::IOLECLIENTSITE_VTBL,
@@ -71,12 +75,17 @@ pub fn create_host_wrappers(hwnd: HWND) -> HostWrappers {
         lp_vtbl: &crate::com::control_site::IOLECONTROLSITE_VTBL,
         shared,
     }));
+    let service_provider = Box::into_raw(Box::new(MyServiceProvider {
+        lp_vtbl: &crate::com::service_provider::ISERVICEPROVIDER_VTBL,
+        shared,
+    }));
     unsafe {
         (*shared).client_site = client_site;
         (*shared).dispatch = dispatch;
         (*shared).inplace_site = inplace_site;
         (*shared).inplace_site_ex = inplace_site_ex;
         (*shared).control_site = control_site;
+        (*shared).service_provider = service_provider;
     }
     HostWrappers {
         client_site,
@@ -84,6 +93,7 @@ pub fn create_host_wrappers(hwnd: HWND) -> HostWrappers {
         _inplace_site: inplace_site,
         _inplace_site_ex: inplace_site_ex,
         _control_site: control_site,
+        _service_provider: service_provider,
         _shared: shared,
     }
 }

@@ -19,7 +19,9 @@ use std::os::raw::c_void;
 // use windows::core::*;
 use windows::Win32::Foundation::*;
 use windows::Win32::System::Com::IDispatch;
-use windows::Win32::System::Ole::{IOleClientSite, IOleInPlaceSite, IOleInPlaceSiteEx};
+use windows::Win32::System::Ole::{
+    IOleClientSite, IOleControlSite, IOleInPlaceSite, IOleInPlaceSiteEx,
+};
 use windows::core::*;
 
 use windows::Win32::System::Ole::IOleClientSite_Vtbl;
@@ -39,35 +41,69 @@ unsafe extern "system" fn query_interface(
     ppv: *mut *mut c_void,
 ) -> HRESULT {
     unsafe {
-        println!("client_site::QueryInterface called for {:?}", *riid);
         if ppv.is_null() {
             return E_POINTER;
         }
+
         let this = this as *mut MyOleClientSite;
         let shared = (*this).shared;
         let riid = &*riid;
-        if riid == &IOleClientSite::IID || riid == &windows::core::IUnknown::IID {
-            *ppv = this as *mut _ as *mut c_void;
-            add_ref(this as *mut c_void);
-            return S_OK;
-        } else if riid == &IDispatch::IID {
-            let dispatch = (*shared).dispatch;
-            *ppv = dispatch as *mut c_void;
-            crate::com::dispatch::add_ref(dispatch as *mut c_void);
-            return S_OK;
-        } else if riid == &IOleInPlaceSite::IID {
-            let inplace_site = (*shared).inplace_site;
-            *ppv = inplace_site as *mut c_void;
-            crate::com::inplace_site::add_ref(inplace_site as *mut c_void);
-            return S_OK;
-        } else if riid == &IOleInPlaceSiteEx::IID {
-            let inplace_site_ex = (*shared).inplace_site_ex;
-            *ppv = inplace_site_ex as *mut c_void;
-            crate::com::inplace_site_ex::add_ref(inplace_site_ex as *mut c_void);
-            return S_OK;
+
+        match riid {
+            &IOleClientSite::IID | &windows::core::IUnknown::IID => {
+                println!(
+                    "client_site::QueryInterface: {:?} (IOleClientSite / IUknown)",
+                    riid
+                );
+                *ppv = this as *mut _ as *mut c_void;
+                add_ref(this as *mut c_void);
+                S_OK
+            }
+            &IOleControlSite::IID => {
+                println!("client_site::QueryInterface: {:?} (IOleControlSite)", riid);
+                let control_site = (*shared).control_site;
+                *ppv = control_site as *mut c_void;
+                crate::com::control_site::add_ref(control_site as *mut c_void);
+                S_OK
+            }
+            &IDispatch::IID => {
+                println!("client_site::QueryInterface: {:?} (IDispatch)", riid);
+                let dispatch = (*shared).dispatch;
+                *ppv = dispatch as *mut c_void;
+                crate::com::dispatch::add_ref(dispatch as *mut c_void);
+                S_OK
+            }
+            &IOleInPlaceSiteEx::IID => {
+                println!(
+                    "client_site::QueryInterface: {:?} (IOleInPlaceSiteEx)",
+                    riid
+                );
+                let inplace_site_ex = (*shared).inplace_site_ex;
+                *ppv = inplace_site_ex as *mut c_void;
+                crate::com::inplace_site_ex::add_ref(inplace_site_ex as *mut c_void);
+                S_OK
+            }
+            &IOleInPlaceSite::IID => {
+                println!("client_site::QueryInterface: {:?} (IOleInPlaceSite)", riid);
+                let inplace_site = (*shared).inplace_site;
+                *ppv = inplace_site as *mut c_void;
+                crate::com::inplace_site::add_ref(inplace_site as *mut c_void);
+                S_OK
+            }
+            // // TODO: This is not working yet.
+            // &IServiceProvider::IID => {
+            //     println!("client_site::QueryInterface: {:?} (IServiceProvider)", riid);
+            //     let service_provider = (*shared).service_provider;
+            //     *ppv = service_provider as *mut c_void;
+            //     crate::com::service_provider::add_ref(service_provider as *mut c_void);
+            //     S_OK
+            // }
+            _ => {
+                println!("client_site::QueryInterface: {:?}", riid);
+                *ppv = std::ptr::null_mut();
+                E_NOINTERFACE
+            }
         }
-        *ppv = std::ptr::null_mut();
-        E_NOINTERFACE
     }
 }
 
