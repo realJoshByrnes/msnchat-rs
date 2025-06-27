@@ -14,21 +14,20 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
+use crate::IOleInPlaceSiteEx;
 use crate::SIZE;
 use crate::com::shared::SharedSiteState;
 use std::ffi::c_void;
 use std::ptr;
 use windows::Win32::Foundation::{E_NOINTERFACE, E_NOTIMPL, E_POINTER, HWND, RECT, S_OK};
 use windows::Win32::System::Ole::{
-    IOleInPlaceFrame, IOleInPlaceSite, IOleInPlaceSite_Vtbl, IOleInPlaceUIWindow, IOleWindow_Vtbl,
-    OLEINPLACEFRAMEINFO,
+    IOleInPlaceSite, IOleInPlaceSite_Vtbl, IOleWindow_Vtbl, OLEINPLACEFRAMEINFO,
 };
 use windows::core::{BOOL, GUID, HRESULT};
 use windows_core::Interface;
-use crate::IOleInPlaceSiteEx;
 #[repr(C)]
 pub struct MyOleInPlaceSite {
-    pub lpVtbl: *const IOleInPlaceSite_Vtbl,
+    pub lp_vtbl: *const IOleInPlaceSite_Vtbl,
     pub shared: *mut SharedSiteState,
 }
 
@@ -38,65 +37,73 @@ pub unsafe extern "system" fn query_interface(
     riid: *const GUID,
     ppv: *mut *mut c_void,
 ) -> HRESULT {
-    println!("IOleInPlaceSite::QueryInterface called for {:?}", unsafe { *riid });
-    if ppv.is_null() {
-        return E_POINTER;
+    unsafe {
+        println!("IOleInPlaceSite::QueryInterface called for {:?}", *riid);
+        if ppv.is_null() {
+            return E_POINTER;
+        }
+        let this = this as *mut MyOleInPlaceSite;
+        let shared = (*this).shared;
+        let riid = &*riid;
+        if riid == &IOleInPlaceSite::IID || riid == &windows::core::IUnknown::IID {
+            *ppv = this as *mut _ as *mut c_void;
+            add_ref(this as *mut c_void);
+            return S_OK;
+        } else if riid == &windows::Win32::System::Com::IDispatch::IID {
+            let dispatch = (*shared).dispatch;
+            *ppv = dispatch as *mut c_void;
+            crate::com::dispatch::add_ref(dispatch as *mut c_void);
+            return S_OK;
+        } else if riid == &windows::Win32::System::Ole::IOleClientSite::IID {
+            let client_site = (*shared).client_site;
+            *ppv = client_site as *mut c_void;
+            crate::com::client_site::add_ref(client_site as *mut c_void);
+            return S_OK;
+        } else if riid == &IOleInPlaceSite::IID {
+            let inplace_site = (*shared).inplace_site;
+            *ppv = inplace_site as *mut c_void;
+            crate::com::inplace_site::add_ref(inplace_site as *mut c_void);
+            return S_OK;
+        } else if riid == &IOleInPlaceSiteEx::IID {
+            let inplace_site_ex = (*shared).inplace_site_ex;
+            *ppv = inplace_site_ex as *mut c_void;
+            crate::com::inplace_site_ex::add_ref(inplace_site_ex as *mut c_void);
+            return S_OK;
+        }
+        *ppv = ptr::null_mut();
+        E_NOINTERFACE
     }
-    let this = this as *mut MyOleInPlaceSite;
-    let shared = unsafe { (*this).shared };
-    let riid = &*riid;
-    if riid == &IOleInPlaceSite::IID || riid == &windows::core::IUnknown::IID {
-        *ppv = this as *mut _ as *mut c_void;
-        add_ref(this as *mut c_void);
-        return S_OK;
-    } else if riid == &windows::Win32::System::Com::IDispatch::IID {
-        let dispatch = unsafe { (*shared).dispatch };
-        *ppv = dispatch as *mut c_void;
-        crate::com::dispatch::add_ref(dispatch as *mut c_void);
-        return S_OK;
-    } else if riid == &windows::Win32::System::Ole::IOleClientSite::IID {
-        let client_site = unsafe { (*shared).client_site };
-        *ppv = client_site as *mut c_void;
-        crate::com::client_site::AddRef(client_site as *mut c_void);
-        return S_OK;
-    } else if riid == &IOleInPlaceSite::IID {
-        let inplace_site = unsafe { (*shared).inplace_site };
-        *ppv = inplace_site as *mut c_void;
-        crate::com::inplace_site::add_ref(inplace_site as *mut c_void);
-        return S_OK;
-    } else if riid == &IOleInPlaceSiteEx::IID {
-        let inplace_site_ex = unsafe { (*shared).inplace_site_ex };
-        *ppv = inplace_site_ex as *mut c_void;
-        crate::com::inplace_site_ex::add_ref(inplace_site_ex as *mut c_void);
-        return S_OK;
-    }
-    *ppv = ptr::null_mut();
-    E_NOINTERFACE
 }
 
 pub unsafe extern "system" fn add_ref(this: *mut c_void) -> u32 {
-    let site = &mut *(this as *mut MyOleInPlaceSite);
-    (*site.shared).ref_count += 1;
-    (*site.shared).ref_count
+    unsafe {
+        let site = &mut *(this as *mut MyOleInPlaceSite);
+        (*site.shared).ref_count += 1;
+        (*site.shared).ref_count
+    }
 }
 
 pub unsafe extern "system" fn release(this: *mut c_void) -> u32 {
-    let site = &mut *(this as *mut MyOleInPlaceSite);
-    (*site.shared).ref_count -= 1;
-    let count = (*site.shared).ref_count;
-    if count == 0 {
-        drop(Box::from_raw(this as *mut MyOleInPlaceSite));
+    unsafe {
+        let site = &mut *(this as *mut MyOleInPlaceSite);
+        (*site.shared).ref_count -= 1;
+        let count = (*site.shared).ref_count;
+        if count == 0 {
+            drop(Box::from_raw(this as *mut MyOleInPlaceSite));
+        }
+        count
     }
-    count
 }
 
 // --- IOleInPlaceSite methods (stubs) ---
 unsafe extern "system" fn get_window(_this: *mut c_void, phwnd: *mut HWND) -> HRESULT {
-    println!("IOleInPlaceSite::GetWindow called");
-    if !phwnd.is_null() {
-        *phwnd = HWND(std::ptr::null_mut());
+    unsafe {
+        println!("IOleInPlaceSite::GetWindow called");
+        if !phwnd.is_null() {
+            *phwnd = HWND(std::ptr::null_mut());
+        }
+        S_OK
     }
-    S_OK
 }
 unsafe extern "system" fn context_sensitive_help(
     _this: *mut c_void,
@@ -125,23 +132,25 @@ unsafe extern "system" fn get_window_context(
     lprc_clip_rect: *mut RECT,
     lp_frame_info: *mut OLEINPLACEFRAMEINFO,
 ) -> HRESULT {
-    println!("IOleInPlaceSite::GetWindowContext called");
-    if !pp_frame.is_null() {
-        *pp_frame = ptr::null_mut();
+    unsafe {
+        println!("IOleInPlaceSite::GetWindowContext called");
+        if !pp_frame.is_null() {
+            *pp_frame = ptr::null_mut();
+        }
+        if !pp_doc.is_null() {
+            *pp_doc = ptr::null_mut();
+        }
+        if !lprc_pos_rect.is_null() {
+            *lprc_pos_rect = RECT::default();
+        }
+        if !lprc_clip_rect.is_null() {
+            *lprc_clip_rect = RECT::default();
+        }
+        if !lp_frame_info.is_null() {
+            *lp_frame_info = OLEINPLACEFRAMEINFO::default();
+        }
+        S_OK
     }
-    if !pp_doc.is_null() {
-        *pp_doc = ptr::null_mut();
-    }
-    if !lprc_pos_rect.is_null() {
-        *lprc_pos_rect = RECT::default();
-    }
-    if !lprc_clip_rect.is_null() {
-        *lprc_clip_rect = RECT::default();
-    }
-    if !lp_frame_info.is_null() {
-        *lp_frame_info = OLEINPLACEFRAMEINFO::default();
-    }
-    S_OK
 }
 unsafe extern "system" fn scroll(_this: *mut c_void, _scroll_extent: SIZE) -> HRESULT {
     println!("IOleInPlaceSite::Scroll called");

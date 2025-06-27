@@ -17,7 +17,8 @@
 use windows::Win32::Foundation::HWND;
 
 use crate::com::{
-    client_site::MyOleClientSite, control_site::MyOleControlSite, dispatch::MyDispatch, inplace_site::MyOleInPlaceSite, inplace_site_ex::MyOleInPlaceSiteEx
+    client_site::MyOleClientSite, control_site::MyOleControlSite, dispatch::MyDispatch,
+    inplace_site::MyOleInPlaceSite, inplace_site_ex::MyOleInPlaceSiteEx,
 };
 
 #[repr(C)]
@@ -33,11 +34,11 @@ pub struct SharedSiteState {
 
 pub struct HostWrappers {
     pub client_site: *mut MyOleClientSite,
-    pub dispatch: *mut MyDispatch,
-    pub inplace_site: *mut MyOleInPlaceSite,
-    pub inplace_site_ex: *mut MyOleInPlaceSiteEx,
-    pub control_site: *mut MyOleControlSite,
-    pub shared: *mut SharedSiteState,
+    pub _dispatch: *mut MyDispatch,
+    pub _inplace_site: *mut MyOleInPlaceSite,
+    pub _inplace_site_ex: *mut MyOleInPlaceSiteEx,
+    pub _control_site: *mut MyOleControlSite,
+    pub _shared: *mut SharedSiteState,
 }
 
 pub fn create_host_wrappers(hwnd: HWND) -> HostWrappers {
@@ -51,23 +52,23 @@ pub fn create_host_wrappers(hwnd: HWND) -> HostWrappers {
         control_site: std::ptr::null_mut(),
     }));
     let client_site = Box::into_raw(Box::new(MyOleClientSite {
-        lpVtbl: &crate::com::client_site::IOLECLIENTSITE_VTBL,
+        lp_vtbl: &crate::com::client_site::IOLECLIENTSITE_VTBL,
         shared,
     }));
     let dispatch = Box::into_raw(Box::new(MyDispatch {
-        lpVtbl: &crate::com::dispatch::IDISPATCH_VTBL,
+        lp_vtbl: &crate::com::dispatch::IDISPATCH_VTBL,
         shared,
     }));
     let inplace_site = Box::into_raw(Box::new(MyOleInPlaceSite {
-        lpVtbl: &crate::com::inplace_site::IOLEINPLACESITE_VTBL,
+        lp_vtbl: &crate::com::inplace_site::IOLEINPLACESITE_VTBL,
         shared,
     }));
     let inplace_site_ex = Box::into_raw(Box::new(MyOleInPlaceSiteEx {
-        lpVtbl: &crate::com::inplace_site_ex::IOLEINPLACESITEEX_VTBL,
+        lp_vtbl: &crate::com::inplace_site_ex::IOLEINPLACESITEEX_VTBL,
         shared,
     }));
     let control_site = Box::into_raw(Box::new(MyOleControlSite {
-        lpVtbl: &crate::com::control_site::IOLECONTROLSITE_VTBL,
+        lp_vtbl: &crate::com::control_site::IOLECONTROLSITE_VTBL,
         shared,
     }));
     unsafe {
@@ -79,10 +80,10 @@ pub fn create_host_wrappers(hwnd: HWND) -> HostWrappers {
     }
     HostWrappers {
         client_site,
-        dispatch,
-        inplace_site,
-        inplace_site_ex,
-        control_site,
-        shared,
+        _dispatch: dispatch,
+        _inplace_site: inplace_site,
+        _inplace_site_ex: inplace_site_ex,
+        _control_site: control_site,
+        _shared: shared,
     }
 }

@@ -14,49 +14,49 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-use crate::SIZE;
 use crate::com::shared::SharedSiteState;
 use std::ffi::c_void;
-use std::ptr;
-use windows::Win32::Foundation::{E_NOINTERFACE, E_NOTIMPL, E_POINTER, HWND, RECT, S_OK, POINTL};
-use windows::Win32::System::Ole::{
-    KEYMODIFIERS, POINTF,    IOleInPlaceFrame, IOleInPlaceSite, IOleControlSite_Vtbl, IOleInPlaceUIWindow, IOleWindow_Vtbl,
-    OLEINPLACEFRAMEINFO,
-};
-use windows::core::{BOOL, GUID, HRESULT};
+use windows::Win32::Foundation::{E_NOINTERFACE, E_NOTIMPL, POINTL, S_OK};
+use windows::Win32::System::Ole::{IOleControlSite_Vtbl, KEYMODIFIERS, POINTF};
 use windows::Win32::UI::WindowsAndMessaging;
-use windows_core::Interface;
-use crate::IOleInPlaceSiteEx;
+use windows::core::{BOOL, GUID, HRESULT};
+
 #[repr(C)]
 pub struct MyOleControlSite {
-    pub lpVtbl: *const IOleControlSite_Vtbl,
+    pub lp_vtbl: *const IOleControlSite_Vtbl,
     pub shared: *mut SharedSiteState,
 }
 
 // --- IUnknown methods ---
 pub unsafe extern "system" fn query_interface(
-    this: *mut c_void,
+    _this: *mut c_void,
     riid: *const GUID,
-    ppv: *mut *mut c_void,
+    _ppv: *mut *mut c_void,
 ) -> HRESULT {
-    println!("control_site::QueryInterface called for {:?}", unsafe { *riid });
+    println!("control_site::QueryInterface called for {:?}", unsafe {
+        *riid
+    });
     E_NOINTERFACE
 }
 
 pub unsafe extern "system" fn add_ref(this: *mut c_void) -> u32 {
-    let site = &mut *(this as *mut MyOleControlSite);
-    (*site.shared).ref_count += 1;
-    (*site.shared).ref_count
+    unsafe {
+        let site = &mut *(this as *mut MyOleControlSite);
+        (*site.shared).ref_count += 1;
+        (*site.shared).ref_count
+    }
 }
 
 pub unsafe extern "system" fn release(this: *mut c_void) -> u32 {
-    let site = &mut *(this as *mut MyOleControlSite);
-    (*site.shared).ref_count -= 1;
-    let count = (*site.shared).ref_count;
-    if count == 0 {
-        drop(Box::from_raw(this as *mut MyOleControlSite));
+    unsafe {
+        let site = &mut *(this as *mut MyOleControlSite);
+        (*site.shared).ref_count -= 1;
+        let count = (*site.shared).ref_count;
+        if count == 0 {
+            drop(Box::from_raw(this as *mut MyOleControlSite));
+        }
+        count
     }
-    count
 }
 
 // --- IOleControlSite methods (stubs) ---
@@ -119,5 +119,5 @@ pub static IOLECONTROLSITE_VTBL: IOleControlSite_Vtbl = IOleControlSite_Vtbl {
     TransformCoords: transform_coords,
     TranslateAccelerator: translate_accelerator,
     OnFocus: on_focus,
-    ShowPropertyFrame: show_property_frame
+    ShowPropertyFrame: show_property_frame,
 };

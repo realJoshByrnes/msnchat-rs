@@ -1,9 +1,10 @@
 [package]
 name = "mshtml"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 
 [dependencies]
+rand = "0.9"
 
 [dependencies.windows]
 version = "0.61" # Use a recent stable version of the windows crate

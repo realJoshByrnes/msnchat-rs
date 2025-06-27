@@ -14,34 +14,21 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-use std::ops::Mul;
-use std::os::raw::c_void;
-
-// use windows::core::*;
+use rand::Rng;
+use windows::Win32::Foundation::*;
 use windows::Win32::Graphics::Gdi::*;
 use windows::Win32::System::Com::{
     CLSCTX_INPROC_SERVER, COINIT_APARTMENTTHREADED, CoCreateInstance, CoInitializeEx,
-    CoUninitialize, DISPATCH_METHOD, DISPATCH_PROPERTYGET, DISPATCH_PROPERTYPUT,
-    DISPATCH_PROPERTYPUTREF, DISPPARAMS, EXCEPINFO, IDispatch,
+    CoUninitialize, IDispatch,
 };
-use windows::Win32::System::LibraryLoader::{GetModuleHandleA, GetModuleHandleW};
-use windows::Win32::System::Ole::{
-    DISPID_UNKNOWN, IOleClientSite, IOleInPlaceFrame, IOleInPlaceObject, IOleInPlaceSite,
-    IOleInPlaceSiteEx, IOleInPlaceUIWindow, IOleWindow, OLEINPLACEFRAMEINFO, OLEIVERB_SHOW,
-};
-use windows::Win32::System::Variant::{VARIANT, VT_BSTR, VariantInit};
+use windows::Win32::System::LibraryLoader::GetModuleHandleA;
+use windows::Win32::System::Ole::{IOleInPlaceObject, IOleInPlaceSiteEx, OLEIVERB_SHOW};
 use windows::Win32::UI::WindowsAndMessaging::*;
-use windows::Win32::{self, Foundation::*, System};
 use windows::core::*;
-
-use windows::Win32::System::Ole::IOleClientSite_Vtbl;
 
 #[macro_use]
 mod com;
 
-use com::client_site::*;
-
-use crate::com::shared::SharedSiteState;
 use crate::com::helpers::set_string_property;
 use crate::com::shared::create_host_wrappers;
 
@@ -157,12 +144,12 @@ fn main() -> Result<()> {
 
     let hwnd = match hwnd {
         Ok(h) => h,
-        Err(e) => return Err(Error::from_win32()),
+        Err(_e) => return Err(Error::from_win32()),
     };
 
     unsafe {
         let ole_object_result = create_activex_control(hwnd, h_instance);
-        let mut embedded_ole_object = match ole_object_result {
+        let embedded_ole_object = match ole_object_result {
             Ok(obj) => {
                 println!("ActiveX control instantiated successfully!");
                 obj
@@ -208,7 +195,7 @@ fn main() -> Result<()> {
             return Err(Error::from(hr));
         }
         let dispatch = IDispatch::from_raw(dispatch_ptr as *mut _);
-        
+
         // Set a property on the control (e.g., URL)
         let server = "localhost:6667\0";
         let hr = set_string_property(&dispatch, "Server", server);
@@ -218,8 +205,10 @@ fn main() -> Result<()> {
             println!("Successfully set property on ActiveX control.");
         }
 
-        let nickname = "JDx\0";
-        let hr = set_string_property(&dispatch, "NickName", nickname);
+        let mut rng = rand::rng();
+        let random_number: u32 = rng.random_range(1..=9999); // 1 to 100 inclusive
+        let nickname = format!("User{}-rs\0", random_number);
+        let hr = set_string_property(&dispatch, "NickName", &nickname);
         if hr.is_err() {
             eprintln!("Failed to set property on ActiveX control: {:?}", hr);
         } else {
@@ -253,9 +242,8 @@ fn main() -> Result<()> {
         )?;
 
         // 4. Show and Update the Window
-        ShowWindow(hwnd, SW_SHOW);
-        UpdateWindow(hwnd);
-
+        let _ = ShowWindow(hwnd, SW_SHOW);
+        let _ = UpdateWindow(hwnd);
     }
 
     // 5. Message Loop
@@ -264,7 +252,7 @@ fn main() -> Result<()> {
         // GetMessageA blocks until a message is available
         if unsafe { GetMessageA(&mut msg, None, 0, 0) }.as_bool() {
             unsafe {
-                TranslateMessage(&msg); // Translates virtual-key messages into character messages
+                let _ = TranslateMessage(&msg); // Translates virtual-key messages into character messages
                 DispatchMessageA(&msg); // Dispatches a message to a window procedure
             }
         } else {
@@ -292,7 +280,7 @@ extern "system" fn wnd_proc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM
             if !hdc.is_invalid() {
                 let mut rect = unsafe {
                     let mut r = RECT::default();
-                    GetClientRect(hwnd, &mut r);
+                    let _ = GetClientRect(hwnd, &mut r);
                     r
                 };
                 let mut text = *b"Uhh... There should be MSN Chat here, not this text!\0";
@@ -304,7 +292,7 @@ extern "system" fn wnd_proc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM
                         DT_CENTER | DT_VCENTER | DT_SINGLELINE,
                     );
                 }
-                unsafe { EndPaint(hwnd, &ps) };
+                let _ = unsafe { EndPaint(hwnd, &ps) };
             }
             LRESULT(0)
         }
@@ -321,8 +309,8 @@ extern "system" fn wnd_proc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM
 }
 
 fn create_activex_control(
-    parent_hwnd: HWND,
-    h_instance: HMODULE,
+    _parent_hwnd: HWND,
+    _h_instance: HMODULE,
 ) -> Result<windows::Win32::System::Ole::IOleObject> {
     let clsid_web_browser = &windows::core::GUID::from_u128(
         // 0x8856F961_340A_11D0_A96B_00C04FD705A2u128,
