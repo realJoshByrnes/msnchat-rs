@@ -73,18 +73,18 @@ fn main() -> Result<()> {
     // Create the Window
     let hwnd = unsafe {
         CreateWindowExA(
-            WS_EX_OVERLAPPEDWINDOW,                        // Extended window style
-            PCSTR(WINDOW_CLASS_NAME.as_ptr()),             // Window class name
+            WS_EX_OVERLAPPEDWINDOW,               // Extended window style
+            PCSTR(WINDOW_CLASS_NAME.as_ptr()),    // Window class name
             PCSTR("msnchat-rs by JD\0".as_ptr()), // Window title
-            WS_OVERLAPPEDWINDOW,                           // Window style
-            100,                                           // X position
-            100,                                           // Y position
-            800,                                           // Width
-            600,                                           // Height
-            None,                                          // Parent window (none)
-            None,                                          // Menu (none)
-            Some(h_instance.into()),                       // Instance handle
-            None,                                          // Additional creation data
+            WS_OVERLAPPEDWINDOW,                  // Window style
+            100,                                  // X position
+            100,                                  // Y position
+            800,                                  // Width
+            600,                                  // Height
+            None,                                 // Parent window (none)
+            None,                                 // Menu (none)
+            Some(h_instance.into()),              // Instance handle
+            None,                                 // Additional creation data
         )
     };
 
