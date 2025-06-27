@@ -105,7 +105,7 @@ pub unsafe fn set_string_property(
         let _ = VariantClear(&mut args_variant);
 
         // 6. Check the HRESULT
-        if hr.is_err() {
+        if !hr.is_err() {
             println!(
                 "Successfully set property '{}' to '{}'.",
                 property_name, new_value
