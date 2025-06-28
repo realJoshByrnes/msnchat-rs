@@ -14,66 +14,71 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-use crate::PSTR;
 use std::{
     ffi::c_void,
     os::raw::{c_char, c_int},
 };
 use windows::Win32::Networking::WinSock::{
-    AF_INET, HOSTENT, SEND_RECV_FLAGS, SOCKADDR, SOCKET, WSAEWOULDBLOCK, WSAGetLastError, connect,
-    gethostbyname, htons, inet_addr, recv, send,
+    ADDRESS_FAMILY, ADDRINFOA, AF_INET, AF_INET6, AF_UNSPEC, INET6_ADDRSTRLEN, IPPROTO_TCP,
+    SEND_RECV_FLAGS, SOCK_STREAM, SOCKADDR_IN, SOCKADDR_IN6, SOCKET, SOCKET_ERROR, WSAEWOULDBLOCK,
+    WSAGetLastError, connect, getaddrinfo, inet_ntop, recv, send,
 };
+use windows_core::{PCSTR, s};
 // We're replacing the functions that can be found in the Chat Control OCX.
 // We need to ensure we are returning what is expected from them.
 
 #[unsafe(no_mangle)]
-pub extern "thiscall" fn connect_wrapper(this: *mut c_void, cp: PSTR, u_short: u16) -> bool {
-    // TODO: Add IPv6 support (in progress, see issue #4 at https://github.com/realJoshByrnes/msnchat-rs/issues/4)
+pub extern "thiscall" fn connect_wrapper(this: *mut c_void, cp: PCSTR, u_short: u16) -> bool {
     unsafe {
+        println!("[control_socket:connect_wrapper] Requested address: {}", cp.to_string().unwrap());
         let sock_ptr = (this as *const usize).add(3); // this + 3
         let socket = SOCKET(*sock_ptr as usize);
 
-        let mut sockaddr_in: SOCKADDR = std::mem::zeroed(); // Note: This is using sockaddr_in (IPv4), I've just kept it as sockaddr for simplicity.
+        let mut hints: ADDRINFOA = std::mem::zeroed();
+        hints.ai_family = AF_UNSPEC.0 as i32;
+        hints.ai_socktype = SOCK_STREAM.0;
+        hints.ai_protocol = IPPROTO_TCP.0;
 
-        let ip_as_int = inet_addr(cp); // NOTE: v4 only
-        if ip_as_int == u32::MAX {
-            let resolved = gethostbyname(cp); // NOTE: Deprecated (IPv4 only). Use getaddrinfo (check out AF_UNSPEC) instead.
-            if resolved.is_null() {
-                return false;
+        let port_str = std::ffi::CString::new(format!("{}", u_short)).unwrap();
+        let port_cstr = PCSTR(port_str.as_ptr() as *const u8);
+
+        let mut result: *mut ADDRINFOA = std::ptr::null_mut();
+
+        if getaddrinfo(cp, port_cstr, Some(&hints), &mut result) != 0 || result.is_null() {
+            println!("[control_socket:connect_wrapper] Unable to resolve address");
+            return false;
+        }
+
+        let addrinfoa = *result;
+        let addr = addrinfoa.ai_addr;
+        let addrlen = addrinfoa.ai_addrlen;
+        let family = addrinfoa.ai_family;
+
+        let mut ip_buf = [0u8; INET6_ADDRSTRLEN as usize];
+        let ip_str_ptr = match ADDRESS_FAMILY(family as u16) {
+            AF_INET => {
+                let ipv4 = *(addr as *const SOCKADDR_IN);
+                inet_ntop(family, &ipv4.sin_addr as *const _ as _, &mut ip_buf)
             }
+            AF_INET6 => {
+                let ipv6 = *(addr as *const SOCKADDR_IN6);
+                inet_ntop(family, &ipv6.sin6_addr as *const _ as _, &mut ip_buf)
+            }
+            _ => s!(""),
+        };
 
-            let h_addr_list = (*(resolved as *const HOSTENT)).h_addr_list;
-            let h_addr = *h_addr_list;
-            std::ptr::copy_nonoverlapping(
-                h_addr,
-                sockaddr_in.sa_data.as_mut_ptr().add(2) as *mut _,
-                4, // NOTE: This is only big enough for IPv4
-            );
-        } else {
-            let ip_bytes = ip_as_int.to_ne_bytes();
-            std::ptr::copy_nonoverlapping(
-                ip_bytes.as_ptr(),
-                sockaddr_in.sa_data.as_mut_ptr().add(2) as *mut _,
-                4, // NOTE: This is only big enough for IPv4
-            );
+        if !ip_str_ptr.is_null() {
+            println!("[control_socket:connect_wrapper] Resolved address: {}", ip_str_ptr.to_string().unwrap());
+            let connect_result = connect(socket, addr, addrlen as i32);
+
+            if connect_result != SOCKET_ERROR || WSAGetLastError() == WSAEWOULDBLOCK {
+                return true;
+            }
+            return false;
         }
 
-        sockaddr_in.sa_family = AF_INET; //  NOTE: IPv4. IPv6 is AF_INET6
-
-        let port = htons(u_short);
-        sockaddr_in.sa_data[0] = (port & 0xFF) as c_char;
-        sockaddr_in.sa_data[1] = (port >> 8) as c_char;
-
-        let result = connect(socket, &sockaddr_in, size_of::<SOCKADDR>() as c_int);
-
-        if result != -1 || WSAGetLastError() == WSAEWOULDBLOCK {
-            println!(
-                "Connecting to ...{:X?} ({:?})",
-                sockaddr_in.sa_data, sockaddr_in.sa_family.0
-            );
-            return true;
-        }
-
+        // Prevent connecting to a file socket etc.
+        println!("[control_socket:connect_wrapper] Prevented connection to unknown address (family {})", family);
         false
     }
 }
