@@ -29,8 +29,8 @@ pub fn init_hacks() {
             }
         };
 
-        let target_addr = 0x3722E83B as *mut u8;
-        let patch_bytes = [0x90, 0x90, 0x90, 0x90]; // NOP the check that source was OPER
+        let target_addr: usize = 0x372041C8; // "MSN-OCX" (null-terminated)
+        let patch_bytes = [0x4D, 0x53, 0x4E, 0x2D, 0x52, 0x53, 0x00]; // Replace with "MSN-RS\0"
 
         // Disable memory protection
         let mut old_protect = PAGE_PROTECTION_FLAGS(0);
@@ -40,7 +40,6 @@ pub fn init_hacks() {
             PAGE_EXECUTE_READWRITE,
             &mut old_protect,
         );
-        println!("Disabled memory protection: {:?}", success);
         
         // Write patch
         std::ptr::copy_nonoverlapping(patch_bytes.as_ptr(), target_addr as *mut u8, patch_bytes.len());
@@ -52,7 +51,91 @@ pub fn init_hacks() {
             PAGE_EXECUTE_READWRITE,
             &mut old_protect,
         );
-        println!("Restored memory protection: {:?}", success);
+
+        let target_addr = 0x3722E83B as *mut u8; // CTCP VERSION check - skip if user is NOT oper
+        let patch_bytes = [0x90, 0x90, 0x90, 0x90]; // NOP it - reply to everyone
+
+        // Disable memory protection
+        let mut old_protect = PAGE_PROTECTION_FLAGS(0);
+        let success = VirtualProtect(
+            target_addr as *mut _,
+            patch_bytes.len(),
+            PAGE_EXECUTE_READWRITE,
+            &mut old_protect,
+        );
+        
+        // Write patch
+        std::ptr::copy_nonoverlapping(patch_bytes.as_ptr(), target_addr as *mut u8, patch_bytes.len());
+
+        // Restore memory protection
+        let success = VirtualProtect(
+            target_addr as *mut _,
+            patch_bytes.len(),
+            PAGE_EXECUTE_READWRITE,
+            &mut old_protect,
+        );
+
+        // Patch version string at 0x37203AD4
+        let version_addr = 0x37203AD4 as *mut u8;
+        let cargo_version = env!("CARGO_PKG_VERSION");
+        // Ensure the string fits (max 13 bytes including null terminator)
+        let mut version_bytes = [0u8; 14];
+        let bytes = cargo_version.as_bytes();
+        let len = bytes.len().min(13); // leave space for null
+        version_bytes[..len].copy_from_slice(&bytes[..len]);
+        version_bytes[len] = 0; // null-terminate
+
+        // Disable memory protection
+        let mut old_protect = PAGE_PROTECTION_FLAGS(0);
+        let _ = VirtualProtect(
+            version_addr as *mut _,
+            version_bytes.len(),
+            PAGE_EXECUTE_READWRITE,
+            &mut old_protect,
+        );
+
+        // Write patch
+        std::ptr::copy_nonoverlapping(version_bytes.as_ptr(), version_addr, version_bytes.len());
+
+        // Restore memory protection
+        let _ = VirtualProtect(
+            version_addr as *mut _,
+            version_bytes.len(),
+            PAGE_EXECUTE_READWRITE,
+            &mut old_protect,
+        );
+
+        // Patch UTF-16LE version label at 0x37203AE4
+        let label_addr = 0x37203AE4 as *mut u16;
+        let cargo_name = env!("CARGO_PKG_NAME");
+        let label = format!("{} v", cargo_name);
+
+        // The original buffer is 28 UTF-16 code units (56 bytes, including null terminator)
+        let mut label_utf16: [u16; 28] = [0; 28];
+        let label_encoded: Vec<u16> = label.encode_utf16().collect();
+        let len = label_encoded.len().min(27); // leave space for null
+        label_utf16[..len].copy_from_slice(&label_encoded[..len]);
+        label_utf16[len] = 0; // null-terminate
+
+        // Disable memory protection
+        let mut old_protect = PAGE_PROTECTION_FLAGS(0);
+        let _ = VirtualProtect(
+            label_addr as *mut _,
+            label_utf16.len() * 2,
+            PAGE_EXECUTE_READWRITE,
+            &mut old_protect,
+        );
+
+        // Write patch
+        std::ptr::copy_nonoverlapping(label_utf16.as_ptr(), label_addr, label_utf16.len());
+
+        // Restore memory protection
+        let _ = VirtualProtect(
+            label_addr as *mut _,
+            label_utf16.len() * 2,
+            PAGE_EXECUTE_READWRITE,
+            &mut old_protect,
+        );
 
         println!(
             "Base address of '{}' in process {} is: 0x{:X}",
@@ -61,13 +144,8 @@ pub fn init_hacks() {
             base.0 as usize
         );
     }
-
-    //0x71e36 = "Please wait..."
-    // unsafe {
-    //     // write non overlap
-    //     let newstr = w!("Hello, world!");
-    //     copy_nonoverlapping(newstr.as_ptr(), base.0 as *mut u16, 8);
-    // }
+    //    mov eax, 0x7F000001  → B8 01 00 00 7F
+    //    jmp +0x3E             → E9 3E (relative displacement to loc_37232F74)
 }
 
 fn get_module_base_address(process_id: u32, module_name: &OsStr) -> Option<HMODULE> {
