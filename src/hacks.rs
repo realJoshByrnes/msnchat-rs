@@ -29,113 +29,37 @@ pub fn init_hacks() {
             }
         };
 
-        let target_addr: usize = 0x372041C8; // "MSN-OCX" (null-terminated)
-        let patch_bytes = [0x4D, 0x53, 0x4E, 0x2D, 0x52, 0x53, 0x00]; // Replace with "MSN-RS\0"
+        // Patch User-Agent
+        // OLD: "MSN-OCX"
+        // NEW: "MSN-RS\0"
+        patch_bytes(0x372041C8 as *mut u8, b"MSN-RS\0");
 
-        // Disable memory protection
-        let mut old_protect = PAGE_PROTECTION_FLAGS(0);
-        let success = VirtualProtect(
-            target_addr as *mut _,
-            patch_bytes.len(),
-            PAGE_EXECUTE_READWRITE,
-            &mut old_protect,
-        );
-        
-        // Write patch
-        std::ptr::copy_nonoverlapping(patch_bytes.as_ptr(), target_addr as *mut u8, patch_bytes.len());
+        // CTCP version reply: NOP non-oper check (version reply to everyone)
+        patch_bytes(0x3722E83B as *mut u8, &[0x90, 0x90, 0x90, 0x90]);
 
-        // Restore memory protection
-        let success = VirtualProtect(
-            target_addr as *mut _,
-            patch_bytes.len(),
-            PAGE_EXECUTE_READWRITE,
-            &mut old_protect,
-        );
-
-        let target_addr = 0x3722E83B as *mut u8; // CTCP VERSION check - skip if user is NOT oper
-        let patch_bytes = [0x90, 0x90, 0x90, 0x90]; // NOP it - reply to everyone
-
-        // Disable memory protection
-        let mut old_protect = PAGE_PROTECTION_FLAGS(0);
-        let success = VirtualProtect(
-            target_addr as *mut _,
-            patch_bytes.len(),
-            PAGE_EXECUTE_READWRITE,
-            &mut old_protect,
-        );
-        
-        // Write patch
-        std::ptr::copy_nonoverlapping(patch_bytes.as_ptr(), target_addr as *mut u8, patch_bytes.len());
-
-        // Restore memory protection
-        let success = VirtualProtect(
-            target_addr as *mut _,
-            patch_bytes.len(),
-            PAGE_EXECUTE_READWRITE,
-            &mut old_protect,
-        );
-
-        // Patch version string at 0x37203AD4
-        let version_addr = 0x37203AD4 as *mut u8;
+        // Patch version string
+        // OLD: "9.02.0310.2401"
+        // NEW: "0.1.3\0" (or whatever is set by cargo)
         let cargo_version = env!("CARGO_PKG_VERSION");
-        // Ensure the string fits (max 13 bytes including null terminator)
         let mut version_bytes = [0u8; 14];
         let bytes = cargo_version.as_bytes();
-        let len = bytes.len().min(13); // leave space for null
+        let len = bytes.len().min(13);
         version_bytes[..len].copy_from_slice(&bytes[..len]);
-        version_bytes[len] = 0; // null-terminate
-
-        // Disable memory protection
-        let mut old_protect = PAGE_PROTECTION_FLAGS(0);
-        let _ = VirtualProtect(
-            version_addr as *mut _,
-            version_bytes.len(),
-            PAGE_EXECUTE_READWRITE,
-            &mut old_protect,
-        );
-
-        // Write patch
-        std::ptr::copy_nonoverlapping(version_bytes.as_ptr(), version_addr, version_bytes.len());
-
-        // Restore memory protection
-        let _ = VirtualProtect(
-            version_addr as *mut _,
-            version_bytes.len(),
-            PAGE_EXECUTE_READWRITE,
-            &mut old_protect,
-        );
+        version_bytes[len] = 0;
+        patch_bytes(0x37203AD4 as *mut u8, &version_bytes);
 
         // Patch UTF-16LE version label at 0x37203AE4
-        let label_addr = 0x37203AE4 as *mut u16;
+        // OLD: "MSN Chat Control, version #"
+        // NEW: "(*) msnchat-rs (*) v\0"
         let cargo_name = env!("CARGO_PKG_NAME");
-        let label = format!("{} v", cargo_name);
-
-        // The original buffer is 28 UTF-16 code units (56 bytes, including null terminator)
+        let label = format!("(*) {} (*) v", cargo_name);
         let mut label_utf16: [u16; 28] = [0; 28];
         let label_encoded: Vec<u16> = label.encode_utf16().collect();
-        let len = label_encoded.len().min(27); // leave space for null
-        label_utf16[..len].copy_from_slice(&label_encoded[..len]);
-        label_utf16[len] = 0; // null-terminate
-
-        // Disable memory protection
-        let mut old_protect = PAGE_PROTECTION_FLAGS(0);
-        let _ = VirtualProtect(
-            label_addr as *mut _,
-            label_utf16.len() * 2,
-            PAGE_EXECUTE_READWRITE,
-            &mut old_protect,
-        );
-
-        // Write patch
-        std::ptr::copy_nonoverlapping(label_utf16.as_ptr(), label_addr, label_utf16.len());
-
-        // Restore memory protection
-        let _ = VirtualProtect(
-            label_addr as *mut _,
-            label_utf16.len() * 2,
-            PAGE_EXECUTE_READWRITE,
-            &mut old_protect,
-        );
+        let copy_len = label_encoded.len().min(27);
+        label_utf16[..copy_len].copy_from_slice(&label_encoded[..copy_len]);
+        for i in copy_len..28 { label_utf16[i] = 0; }
+        let bytes: &[u8] = std::slice::from_raw_parts(label_utf16.as_ptr() as *const u8, label_utf16.len() * 2);
+        patch_bytes(0x37203AE4 as *mut u8, &bytes);
 
         println!(
             "Base address of '{}' in process {} is: 0x{:X}",
@@ -144,8 +68,25 @@ pub fn init_hacks() {
             base.0 as usize
         );
     }
-    //    mov eax, 0x7F000001  → B8 01 00 00 7F
-    //    jmp +0x3E             → E9 3E (relative displacement to loc_37232F74)
+}
+
+unsafe fn patch_bytes(addr: *mut u8, bytes: &[u8]) {
+    let mut old_protect = PAGE_PROTECTION_FLAGS(0);
+    unsafe {
+        let _ = VirtualProtect(
+            addr as *mut _,
+            bytes.len(),
+            PAGE_EXECUTE_READWRITE,
+            &mut old_protect,
+        );
+        std::ptr::copy_nonoverlapping(bytes.as_ptr(), addr, bytes.len());
+        let _ = VirtualProtect(
+            addr as *mut _,
+            bytes.len(),
+            PAGE_EXECUTE_READWRITE,
+            &mut old_protect,
+        );
+    }
 }
 
 fn get_module_base_address(process_id: u32, module_name: &OsStr) -> Option<HMODULE> {
