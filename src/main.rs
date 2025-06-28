@@ -30,6 +30,8 @@ use windows::core::*;
 mod com;
 mod hacks;
 
+mod control_socket;
+
 use hacks::init_hacks;
 
 use crate::com::helpers::set_string_property;

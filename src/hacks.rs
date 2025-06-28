@@ -1,3 +1,19 @@
+// msnchat-rs
+// Copyright (C) 2025 Joshua Byrnes
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with this program. If not, see <https://www.gnu.org/licenses/>.
+
 use std::ffi::{OsStr, OsString};
 use std::os::windows::ffi::OsStringExt;
 use std::path::PathBuf;
@@ -6,6 +22,8 @@ use windows::Win32::System::ProcessStatus::{GetModuleFileNameExW, K32EnumProcess
 use windows::Win32::System::Threading::OpenProcess;
 use windows::Win32::{Foundation::HMODULE, System::Threading::PROCESS_ACCESS_RIGHTS};
 use windows::Win32::System::Memory::{VirtualProtect, PAGE_EXECUTE_READWRITE, PAGE_PROTECTION_FLAGS};
+
+use crate::control_socket;
 
 const PROCESS_QUERY_INFORMATION: PROCESS_ACCESS_RIGHTS = PROCESS_ACCESS_RIGHTS(0x0400); // Standard access to query process info
 const PROCESS_VM_READ: PROCESS_ACCESS_RIGHTS = PROCESS_ACCESS_RIGHTS(0x0010); // Required to read memory for module info
@@ -32,10 +50,10 @@ pub fn init_hacks() {
         // Patch User-Agent
         // OLD: "MSN-OCX"
         // NEW: "MSN-RS\0"
-        patch_bytes(0x372041C8 as *mut u8, b"MSN-RS\0");
+        patch_mem(0x372041C8 as *mut u8, b"MSN-RS\0");
 
         // CTCP version reply: NOP non-oper check (version reply to everyone)
-        patch_bytes(0x3722E83B as *mut u8, &[0x90, 0x90, 0x90, 0x90]);
+        patch_mem(0x3722E83B as *mut u8, &[0x90, 0x90, 0x90, 0x90]);
 
         // Patch version string
         // OLD: "9.02.0310.2401"
@@ -46,7 +64,7 @@ pub fn init_hacks() {
         let len = bytes.len().min(13);
         version_bytes[..len].copy_from_slice(&bytes[..len]);
         version_bytes[len] = 0;
-        patch_bytes(0x37203AD4 as *mut u8, &version_bytes);
+        patch_mem(0x37203AD4 as *mut u8, &version_bytes);
 
         // Patch UTF-16LE version label at 0x37203AE4
         // OLD: "MSN Chat Control, version #"
@@ -59,7 +77,9 @@ pub fn init_hacks() {
         label_utf16[..copy_len].copy_from_slice(&label_encoded[..copy_len]);
         for i in copy_len..28 { label_utf16[i] = 0; }
         let bytes: &[u8] = std::slice::from_raw_parts(label_utf16.as_ptr() as *const u8, label_utf16.len() * 2);
-        patch_bytes(0x37203AE4 as *mut u8, &bytes);
+        patch_mem(0x37203AE4 as *mut u8, &bytes);
+
+        patch_socket_fns();
 
         println!(
             "Base address of '{}' in process {} is: 0x{:X}",
@@ -70,7 +90,27 @@ pub fn init_hacks() {
     }
 }
 
-unsafe fn patch_bytes(addr: *mut u8, bytes: &[u8]) {
+unsafe fn patch_socket_fns() {
+    unsafe {
+        create_jmp(0x37232FDD, control_socket::recv_wrapper as usize);
+        create_jmp(0x37233000, control_socket::send_wrapper as usize);
+        create_jmp(0x37232F1D, control_socket::connect_wrapper as usize);
+    };
+}
+
+unsafe fn create_jmp(addr: usize, f: usize) {
+    let offset = f.wrapping_sub(addr + 5); // Offset for patch_bytes
+    let patch_bytes = [
+        0xE9, // JMP
+        (offset & 0xFF) as u8,
+        (offset >> 8) as u8,
+        (offset >> 16) as u8,
+        (offset >> 24) as u8,
+    ];
+    unsafe { patch_mem(addr as *mut u8, &patch_bytes); }
+}
+
+unsafe fn patch_mem(addr: *mut u8, bytes: &[u8]) {
     let mut old_protect = PAGE_PROTECTION_FLAGS(0);
     unsafe {
         let _ = VirtualProtect(
