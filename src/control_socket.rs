@@ -14,9 +14,15 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-use std::{os::raw::{c_char, c_int}, ffi::c_void};
-use windows::Win32::Networking::WinSock::{gethostbyname, inet_addr, recv, send, connect, WSAGetLastError, AF_INET, htons, HOSTENT, SEND_RECV_FLAGS, SOCKADDR, SOCKET, WSAEWOULDBLOCK};
 use crate::PSTR;
+use std::{
+    ffi::c_void,
+    os::raw::{c_char, c_int},
+};
+use windows::Win32::Networking::WinSock::{
+    AF_INET, HOSTENT, SEND_RECV_FLAGS, SOCKADDR, SOCKET, WSAEWOULDBLOCK, WSAGetLastError, connect,
+    gethostbyname, htons, inet_addr, recv, send,
+};
 // We're replacing the functions that can be found in the Chat Control OCX.
 // We need to ensure we are returning what is expected from them.
 
@@ -61,14 +67,16 @@ pub extern "thiscall" fn connect_wrapper(this: *mut c_void, cp: PSTR, u_short: u
         let result = connect(socket, &sockaddr_in, size_of::<SOCKADDR>() as c_int);
 
         if result != -1 || WSAGetLastError() == WSAEWOULDBLOCK {
-            println!("Connecting to ...{:X?} ({:?})", sockaddr_in.sa_data, sockaddr_in.sa_family.0);
+            println!(
+                "Connecting to ...{:X?} ({:?})",
+                sockaddr_in.sa_data, sockaddr_in.sa_family.0
+            );
             return true;
         }
 
         false
     }
 }
-
 
 #[unsafe(no_mangle)]
 pub extern "thiscall" fn recv_wrapper(this: *mut c_void, buf: *mut c_char, len: c_int) -> c_int {
@@ -81,11 +89,17 @@ pub extern "thiscall" fn recv_wrapper(this: *mut c_void, buf: *mut c_char, len: 
 
         if result > 0 {
             let printable = String::from_utf8_lossy(&slice[..result as usize]);
-            println!("[hooked_recv_proxy] SOCKET=0x{:X}, len={}, text=\"{}\"", socket.0 as usize, result, printable);
+            println!(
+                "[hooked_recv_proxy] SOCKET=0x{:X}, len={}, text=\"{}\"",
+                socket.0 as usize, result, printable
+            );
         } else {
             println!(
                 "[hooked_recv_proxy] SOCKET=0x{:X}, len={}, result={}, error={}",
-                socket.0 as usize, len, result, WSAGetLastError().0
+                socket.0 as usize,
+                len,
+                result,
+                WSAGetLastError().0
             );
         }
         if result == -1 {
@@ -107,9 +121,15 @@ pub extern "thiscall" fn send_wrapper(this: *mut c_void, buf: *const c_char, len
 
         if slice.len() > 0 {
             let printable = String::from_utf8_lossy(&slice[..slice.len() as usize]);
-            println!("[hook_send_proxy] SOCKET=0x{:X}, len={}, text=\"{}\"", socket.0 as usize, slice.len(), printable);
+            println!(
+                "[hook_send_proxy] SOCKET=0x{:X}, len={}, text=\"{}\"",
+                socket.0 as usize,
+                slice.len(),
+                printable
+            );
         }
 
-        return send(socket, slice, SEND_RECV_FLAGS::default()) != -1 || WSAGetLastError() == WSAEWOULDBLOCK;
+        return send(socket, slice, SEND_RECV_FLAGS::default()) != -1
+            || WSAGetLastError() == WSAEWOULDBLOCK;
     }
 }

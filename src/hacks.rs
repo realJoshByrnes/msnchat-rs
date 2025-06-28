@@ -18,10 +18,12 @@ use std::ffi::{OsStr, OsString};
 use std::os::windows::ffi::OsStringExt;
 use std::path::PathBuf;
 use windows::Win32::Foundation::CloseHandle;
+use windows::Win32::System::Memory::{
+    PAGE_EXECUTE_READWRITE, PAGE_PROTECTION_FLAGS, VirtualProtect,
+};
 use windows::Win32::System::ProcessStatus::{GetModuleFileNameExW, K32EnumProcessModules};
 use windows::Win32::System::Threading::OpenProcess;
 use windows::Win32::{Foundation::HMODULE, System::Threading::PROCESS_ACCESS_RIGHTS};
-use windows::Win32::System::Memory::{VirtualProtect, PAGE_EXECUTE_READWRITE, PAGE_PROTECTION_FLAGS};
 
 use crate::control_socket;
 
@@ -75,8 +77,11 @@ pub fn init_hacks() {
         let label_encoded: Vec<u16> = label.encode_utf16().collect();
         let copy_len = label_encoded.len().min(27);
         label_utf16[..copy_len].copy_from_slice(&label_encoded[..copy_len]);
-        for i in copy_len..28 { label_utf16[i] = 0; }
-        let bytes: &[u8] = std::slice::from_raw_parts(label_utf16.as_ptr() as *const u8, label_utf16.len() * 2);
+        for i in copy_len..28 {
+            label_utf16[i] = 0;
+        }
+        let bytes: &[u8] =
+            std::slice::from_raw_parts(label_utf16.as_ptr() as *const u8, label_utf16.len() * 2);
         patch_mem(0x37203AE4 as *mut u8, &bytes);
 
         patch_socket_fns();
@@ -107,7 +112,9 @@ unsafe fn create_jmp(addr: usize, f: usize) {
         (offset >> 16) as u8,
         (offset >> 24) as u8,
     ];
-    unsafe { patch_mem(addr as *mut u8, &patch_bytes); }
+    unsafe {
+        patch_mem(addr as *mut u8, &patch_bytes);
+    }
 }
 
 unsafe fn patch_mem(addr: *mut u8, bytes: &[u8]) {
