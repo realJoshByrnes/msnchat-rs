@@ -18,6 +18,7 @@ use std::ffi::{OsStr, OsString};
 use std::os::windows::ffi::OsStringExt;
 use std::path::PathBuf;
 use windows::Win32::Foundation::CloseHandle;
+use windows::Win32::Networking::WinSock::AF_UNSPEC;
 use windows::Win32::System::Memory::{
     PAGE_EXECUTE_READWRITE, PAGE_PROTECTION_FLAGS, VirtualProtect,
 };
@@ -99,8 +100,8 @@ unsafe fn patch_socket_fns() {
     unsafe {
         // Patch ADRESS_FAMILY on the socket ctor (for IPv6)
         // OLD: AF_INET
-        // NEW: AF_INET6
-        patch_mem(0x37232ec3 as *mut u8, &[0x17]);
+        // NEW: AF_UNSPEC
+        patch_mem(0x37232ec3 as *mut u8, &[AF_UNSPEC.0 as u8]);
     
         create_jmp(0x37232FDD, control_socket::recv_wrapper as usize);
         create_jmp(0x37233000, control_socket::send_wrapper as usize);
