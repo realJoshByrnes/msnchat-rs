@@ -19,25 +19,28 @@ use std::{
     os::raw::{c_char, c_int},
 };
 use windows::Win32::Networking::WinSock::{
-    ADDRESS_FAMILY, ADDRINFOA, AF_INET, AF_INET6, AF_UNSPEC, INET6_ADDRSTRLEN, IPPROTO_TCP,
-    SEND_RECV_FLAGS, SOCK_STREAM, SOCKADDR_IN, SOCKADDR_IN6, SOCKET, SOCKET_ERROR, WSAEWOULDBLOCK,
-    WSAGetLastError, connect, getaddrinfo, inet_ntop, recv, send,
+    ADDRINFOA, AF_INET6, AI_V4MAPPED, FIONBIO, INET6_ADDRSTRLEN, IPPROTO_IPV6, IPPROTO_TCP,
+    IPV6_V6ONLY, SEND_RECV_FLAGS, SOCK_STREAM, SOCKADDR_IN6, SOCKET, SOCKET_ERROR,
+    WINSOCK_SOCKET_TYPE, WSAEWOULDBLOCK, WSAGetLastError, connect, getaddrinfo, inet_ntop,
+    ioctlsocket, recv, send, setsockopt, socket,
 };
-use windows_core::{PCSTR, s};
+use windows_core::PCSTR;
 // We're replacing the functions that can be found in the Chat Control OCX.
 // We need to ensure we are returning what is expected from them.
 
-
-// TODO: TODO: TODO: TODO: TODO: TODO: TODO: TODO: TODO: TODO: TODO: TODO: TODO: TODO: TODO: TODO: TODO: TODO: TODO: sub_37232EB9
 #[unsafe(no_mangle)]
 pub extern "thiscall" fn connect_wrapper(this: *mut c_void, cp: PCSTR, u_short: u16) -> bool {
     unsafe {
-        println!("[control_socket:connect_wrapper] Requested address: {}", cp.to_string().unwrap());
+        println!(
+            "[control_socket:connect_wrapper] Requested address: {}",
+            cp.to_string().unwrap()
+        );
         let sock_ptr = (this as *const usize).add(3); // this + 3
         let socket = SOCKET(*sock_ptr as usize);
 
         let mut hints: ADDRINFOA = std::mem::zeroed();
-        hints.ai_family = AF_UNSPEC.0 as i32;
+        hints.ai_family = AF_INET6.0 as i32;
+        hints.ai_flags = AI_V4MAPPED as i32;
         hints.ai_socktype = SOCK_STREAM.0;
         hints.ai_protocol = IPPROTO_TCP.0;
 
@@ -56,32 +59,65 @@ pub extern "thiscall" fn connect_wrapper(this: *mut c_void, cp: PCSTR, u_short: 
         let addrlen = addrinfoa.ai_addrlen;
         let family = addrinfoa.ai_family;
 
-        let mut ip_buf = [0u8; INET6_ADDRSTRLEN as usize];
-        let ip_str_ptr = match ADDRESS_FAMILY(family as u16) {
-            AF_INET => {
-                let ipv4 = *(addr as *const SOCKADDR_IN);
-                inet_ntop(family, &ipv4.sin_addr as *const _ as _, &mut ip_buf)
-            }
-            AF_INET6 => {
-                let ipv6 = *(addr as *const SOCKADDR_IN6);
-                inet_ntop(family, &ipv6.sin6_addr as *const _ as _, &mut ip_buf)
-            }
-            _ => s!(""),
-        };
+        if family == AF_INET6.0.into() {
+            let ipv6 = *(addr as *const SOCKADDR_IN6);
 
-        if !ip_str_ptr.is_null() {
-            println!("[control_socket:connect_wrapper] Resolved address: {}", ip_str_ptr.to_string().unwrap());
+            let mut ip_str_buf = [0u8; INET6_ADDRSTRLEN as usize];
+            let ip_str_pcstr = inet_ntop(family, &ipv6.sin6_addr as *const _ as _, &mut ip_str_buf);
+            println!(
+                "[control_socket:connect_wrapper] Resolved address: {}",
+                ip_str_pcstr.to_string().unwrap()
+            );
+
             let connect_result = connect(socket, addr, addrlen as i32);
-
             if connect_result != SOCKET_ERROR || WSAGetLastError() == WSAEWOULDBLOCK {
                 return true;
             }
             return false;
         }
 
-        // Prevent connecting to a file socket etc.
-        println!("[control_socket:connect_wrapper] Prevented connection to unknown address (family {})", family);
+        // Prevent connecting to IPv4 (should be IPv6 mapped), file socket etc.
+        println!(
+            "[control_socket:connect_wrapper] Prevented connection to unknown address (family {})",
+            family
+        );
         false
+    }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "thiscall" fn socket_try_ctor(this: *mut c_void) -> bool {
+    unsafe {
+        let s = socket(
+            AF_INET6.0.into(),
+            WINSOCK_SOCKET_TYPE(SOCK_STREAM.0),
+            IPPROTO_TCP.0,
+        );
+        let s = match s {
+            Ok(s) => {
+                // We re-wrote this fn in rust just so we could (try) and disable IPV6_V6ONLY.
+                setsockopt(
+                    s,
+                    IPPROTO_IPV6.0,
+                    IPV6_V6ONLY,
+                    Some(&(false as i32).to_ne_bytes()),
+                );
+                *(this as *mut usize).add(3) = s.0 as usize; // Store in this[2]
+                s
+            }
+            Err(_) => return false,
+        };
+
+        let mut argp: u32 = 1;
+        if ioctlsocket(s, FIONBIO, &mut argp) == -1 {
+            // Non-blocking IO
+            let vtable = *(this as *const *const usize);
+            let destructor: extern "thiscall" fn(*mut u32) = std::mem::transmute(*vtable.add(8));
+            destructor(this as *mut u32);
+            return false;
+        }
+
+        true
     }
 }
 
