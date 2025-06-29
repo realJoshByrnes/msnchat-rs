@@ -97,6 +97,11 @@ pub fn init_hacks() {
 
 unsafe fn patch_socket_fns() {
     unsafe {
+        // Patch ADRESS_FAMILY on the socket ctor (for IPv6)
+        // OLD: AF_INET
+        // NEW: AF_INET6
+        patch_mem(0x37232ec3 as *mut u8, &[0x17]);
+    
         create_jmp(0x37232FDD, control_socket::recv_wrapper as usize);
         create_jmp(0x37233000, control_socket::send_wrapper as usize);
         create_jmp(0x37232F1D, control_socket::connect_wrapper as usize);

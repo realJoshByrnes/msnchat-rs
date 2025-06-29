@@ -27,6 +27,8 @@ use windows_core::{PCSTR, s};
 // We're replacing the functions that can be found in the Chat Control OCX.
 // We need to ensure we are returning what is expected from them.
 
+
+// TODO: TODO: TODO: TODO: TODO: TODO: TODO: TODO: TODO: TODO: TODO: TODO: TODO: TODO: TODO: TODO: TODO: TODO: TODO: sub_37232EB9
 #[unsafe(no_mangle)]
 pub extern "thiscall" fn connect_wrapper(this: *mut c_void, cp: PCSTR, u_short: u16) -> bool {
     unsafe {
