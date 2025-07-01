@@ -14,7 +14,10 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-use crate::patch::{msnchat45::DLL_NAME, utils::find_module_base};
+use crate::patch::{utils::find_module_base};
+
+/// The default filename for the MSN Chat Control (case-insensitive)
+pub const DLL_NAME: &str = "MSNChat45.ocx";
 
 /// The base address assumed during static analysis (e.g. IDA/Ghidra).
 pub const PREFERRED_BASE_ADDRESS: usize = 0x37200000;

@@ -16,5 +16,3 @@
 
 pub mod reloc;
 pub mod startup;
-
-pub const DLL_NAME: &str = "MSNChat45.ocx";
