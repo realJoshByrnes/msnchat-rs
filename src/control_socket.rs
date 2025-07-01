@@ -35,12 +35,13 @@ use windows::Win32::{
     NetworkManagement::IpHelper::{NET_ADDRESS_DNS_NAME, NET_ADDRESS_IPV4, NET_ADDRESS_IPV6},
     Networking::WinSock::{
         ADDRINFOA, AF_INET, AF_INET6, AI_V4MAPPED, FIONBIO, INET6_ADDRSTRLEN, IPPROTO_IPV6,
-        IPPROTO_TCP, IPV6_V6ONLY, InetNtopW, SEND_RECV_FLAGS, SOCK_STREAM,
-        SOCKADDR_IN6, SOCKET, SOCKET_ERROR, WINSOCK_SOCKET_TYPE, WSAEWOULDBLOCK, WSAGetLastError,
-        connect, getaddrinfo, inet_ntop, ioctlsocket, recv, send, setsockopt, socket,
+        IPPROTO_TCP, IPV6_V6ONLY, InetNtopW, SEND_RECV_FLAGS, SOCK_STREAM, SOCKADDR_IN6, SOCKET,
+        SOCKET_ERROR, WINSOCK_SOCKET_TYPE, WSAEWOULDBLOCK, WSAGetLastError, connect, getaddrinfo,
+        inet_ntop, ioctlsocket, recv, send, setsockopt, socket,
     },
 };
-use windows_core::{PCSTR, PCWSTR, PSTR, w};
+use windows::core::{PCSTR, PCWSTR, PSTR, w};
+
 const NET_STRING_IP_ADDRESS_NO_SCOPE: u32 =
     NET_STRING_IPV4_ADDRESS | NET_STRING_IPV6_ADDRESS_NO_SCOPE;
 const NET_STRING_ANY_ADDRESS_NO_SCOPE: u32 =

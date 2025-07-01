@@ -14,9 +14,9 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
+use crate::PSTR;
 use windows::Win32::Foundation::{ERROR_ALREADY_EXISTS, HMODULE};
 use windows::Win32::Storage::FileSystem::{CreateDirectoryA, GetTempPathA};
-use crate::PSTR;
 
 #[unsafe(no_mangle)]
 pub extern "stdcall" fn get_resdll_storage(_: HMODULE, lp_filename: PSTR, n_size: u32) -> () {
@@ -28,7 +28,8 @@ pub extern "stdcall" fn get_resdll_storage(_: HMODULE, lp_filename: PSTR, n_size
         let user_temp_dir_len = GetTempPathA(Some(slice));
         let cache_dir = b"\\msnchat-rs.cache\\\0";
 
-        if user_temp_dir_len as usize + cache_dir.len() < n_size as usize { // Check we have room to write
+        if user_temp_dir_len as usize + cache_dir.len() < n_size as usize {
+            // Check we have room to write
             std::ptr::copy_nonoverlapping(
                 cache_dir.as_ptr(),
                 slice.as_mut_ptr().add(user_temp_dir_len as usize - 1),
@@ -37,12 +38,14 @@ pub extern "stdcall" fn get_resdll_storage(_: HMODULE, lp_filename: PSTR, n_size
 
             let result = match CreateDirectoryA(lp_filename, None) {
                 Ok(_) => true,
-                Err(e) => e.code() == ERROR_ALREADY_EXISTS.into()
+                Err(e) => e.code() == ERROR_ALREADY_EXISTS.into(),
             };
             if result {
-                println!("ResDLL storage location: {}", lp_filename.to_string().unwrap());
-            }
-            else {
+                println!(
+                    "ResDLL storage location: {}",
+                    lp_filename.to_string().unwrap()
+                );
+            } else {
                 eprintln!("Error: Couldn't create directory for Resource DLL.");
             }
         } else {

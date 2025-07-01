@@ -29,8 +29,9 @@ use windows::core::*;
 #[macro_use]
 mod com;
 mod hacks;
-mod url;
+mod patch;
 mod path;
+mod url;
 
 mod control_socket;
 
@@ -38,6 +39,7 @@ use hacks::init_hacks;
 
 use crate::com::helpers::set_string_property;
 use crate::com::shared::create_host_wrappers;
+use crate::patch::msnchat45::startup::apply_patches;
 
 // Define a unique window class name
 const WINDOW_CLASS_NAME: &[u8] = b"MyActiveXHostWindow\0";
@@ -116,6 +118,7 @@ fn main() -> Result<()> {
         };
 
         init_hacks(); // Initialize any hacks or custom functionality
+        apply_patches();
 
         // Use the correct function to create your host site with the proper vtables
         // Create the wrappers and shared state
@@ -201,7 +204,11 @@ fn main() -> Result<()> {
         let locale = "es-mx\0";
         let _ = set_string_property(&dispatch, "Locale", locale);
         let _ = set_string_property(&dispatch, "Market", locale);
-        let _ = set_string_property(&dispatch, "WhisperContent", "http://info.cern.ch/hypertext/WWW/TheProject.html");
+        let _ = set_string_property(
+            &dispatch,
+            "WhisperContent",
+            "http://info.cern.ch/hypertext/WWW/TheProject.html",
+        );
 
         embedded_ole_object.DoVerb(
             OLEIVERB_SHOW.0,

@@ -106,7 +106,6 @@ pub fn init_hacks() {
         ];
         patch_mem(addr as *mut u8, &patch);
 
-
         create_jmp(0x3724029b, check_buggy_tld_is_allowed as usize);
     }
 }

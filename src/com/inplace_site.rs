@@ -19,12 +19,12 @@ use crate::SIZE;
 use crate::com::shared::SharedSiteState;
 use std::ffi::c_void;
 use std::ptr;
-use windows::Win32::Foundation::{E_NOINTERFACE, E_NOTIMPL, E_POINTER, HWND, RECT, S_OK};
-use windows::Win32::System::Ole::{
-    IOleInPlaceSite, IOleInPlaceSite_Vtbl, IOleWindow_Vtbl, OLEINPLACEFRAMEINFO,
+use windows::Win32::{
+    Foundation::{E_NOINTERFACE, E_NOTIMPL, E_POINTER, HWND, RECT, S_OK},
+    System::Ole::{IOleInPlaceSite, IOleInPlaceSite_Vtbl, IOleWindow_Vtbl, OLEINPLACEFRAMEINFO},
 };
-use windows::core::{BOOL, GUID, HRESULT};
-use windows_core::Interface;
+use windows::core::{BOOL, GUID, HRESULT, Interface};
+
 #[repr(C)]
 pub struct MyOleInPlaceSite {
     pub lp_vtbl: *const IOleInPlaceSite_Vtbl,
