@@ -30,8 +30,12 @@ features = [
     "Win32_System_Threading",
     "Win32_System_ProcessStatus",
     "Win32_Networking_WinSock",
+<<<<<<< HEAD
     "Win32_Storage_FileSystem",
     "Win32_Security"
+=======
+    "Win32_NetworkManagement_IpHelper"
+>>>>>>> d83f132805f44f88bb67c6dc450cad5d89934b45
 ]
 
 [dependencies.windows-core]

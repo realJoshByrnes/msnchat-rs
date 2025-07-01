@@ -117,6 +117,7 @@ unsafe fn patch_socket_fns() {
         create_jmp(0x37232FDD, control_socket::recv_wrapper as usize);
         create_jmp(0x37233000, control_socket::send_wrapper as usize);
         create_jmp(0x37232F1D, control_socket::connect_wrapper as usize);
+        create_jmp(0x3722C405, control_socket::validate_server_address as usize);
     };
 }
 
