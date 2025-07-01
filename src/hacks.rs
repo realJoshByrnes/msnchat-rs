@@ -26,6 +26,8 @@ use windows::Win32::System::Threading::OpenProcess;
 use windows::Win32::{Foundation::HMODULE, System::Threading::PROCESS_ACCESS_RIGHTS};
 
 use crate::control_socket;
+use crate::path::get_resdll_storage;
+use crate::url::check_buggy_tld_is_allowed;
 
 const PROCESS_QUERY_INFORMATION: PROCESS_ACCESS_RIGHTS = PROCESS_ACCESS_RIGHTS(0x0400); // Standard access to query process info
 const PROCESS_VM_READ: PROCESS_ACCESS_RIGHTS = PROCESS_ACCESS_RIGHTS(0x0010); // Required to read memory for module info
@@ -92,6 +94,20 @@ pub fn init_hacks() {
             host_process_id,
             base.0 as usize
         );
+
+        let addr = 0x3721481E;
+        let offset = (get_resdll_storage as usize).wrapping_sub(addr + 5);
+        let patch: [u8; 5] = [
+            0xE8,
+            (offset & 0xFF) as u8,
+            ((offset >> 8) & 0xFF) as u8,
+            ((offset >> 16) & 0xFF) as u8,
+            ((offset >> 24) & 0xFF) as u8,
+        ];
+        patch_mem(addr as *mut u8, &patch);
+
+
+        create_jmp(0x3724029b, check_buggy_tld_is_allowed as usize);
     }
 }
 

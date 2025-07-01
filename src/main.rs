@@ -29,6 +29,8 @@ use windows::core::*;
 #[macro_use]
 mod com;
 mod hacks;
+mod url;
+mod path;
 
 mod control_socket;
 
@@ -186,6 +188,20 @@ fn main() -> Result<()> {
         } else {
             println!("Successfully set property on ActiveX control.");
         }
+
+        // http://sc.communities.msn.com/controls/chat/MsnChat40ko-kr.cab#Version=8,00,0210,2201
+        let room = "http://web.archive.org/web/20051016062609if_/http://fdl.msn.com/public/chat/MsnChat40ja-jp.cab#Version=9,2,310,202\0";
+        let hr = set_string_property(&dispatch, "ResDLL", room);
+        if hr.is_err() {
+            eprintln!("Failed to set property on ActiveX control: {:?}", hr);
+        } else {
+            println!("Successfully set property on ActiveX control.");
+        }
+
+        let locale = "es-mx\0";
+        let _ = set_string_property(&dispatch, "Locale", locale);
+        let _ = set_string_property(&dispatch, "Market", locale);
+        let _ = set_string_property(&dispatch, "WhisperContent", "http://info.cern.ch/hypertext/WWW/TheProject.html");
 
         embedded_ole_object.DoVerb(
             OLEIVERB_SHOW.0,
