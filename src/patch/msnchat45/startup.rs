@@ -16,6 +16,15 @@
 
 use crate::patch::{msnchat45::reloc::PatchContext, utils::patch_bytes};
 
+/// Applies necessary patches to the MSN Chat Control at runtime.
+/// 
+/// This function attempts to locate the base address of the DLL and applies
+/// specific byte patches to it. The `PatchContext` is used to resolve the
+/// actual base address and adjust any static addresses accordingly. If the
+/// module base cannot be resolved, the patching process is aborted. This
+/// function is intended to modify behavior by altering the memory of the
+/// loaded DLL.
+
 pub fn apply_patches() {
     let dll_name = "MSNChat45.ocx";
     if let Some(ctx) = PatchContext::new() {

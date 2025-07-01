@@ -94,6 +94,7 @@ pub unsafe fn patch_bytes(address: usize, patch: &[u8]) -> bool {
 ///
 /// # Returns
 /// Returns the base address of the module if found, otherwise `None`.
+
 pub fn find_module_base(target_name: &str) -> Option<usize> {
     unsafe {
         let snapshot_result = CreateToolhelp32Snapshot(
