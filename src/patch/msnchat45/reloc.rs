@@ -14,7 +14,9 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-use crate::patch::{utils::find_module_base};
+use std::sync::OnceLock;
+
+use crate::patch::utils::find_module_base;
 
 /// The default filename for the MSN Chat Control (case-insensitive)
 pub const DLL_NAME: &str = "MSNChat45.ocx";
@@ -22,20 +24,57 @@ pub const DLL_NAME: &str = "MSNChat45.ocx";
 /// The base address assumed during static analysis (e.g. IDA/Ghidra).
 pub const PREFERRED_BASE_ADDRESS: usize = 0x37200000;
 
+static PATCH_CONTEXT: OnceLock<PatchContext> = OnceLock::new();
+
+#[derive(Debug, Clone)]
 pub struct PatchContext {
     delta: usize,
 }
 
 impl PatchContext {
-    /// Creates a new PatchContext by resolving the actual DLL base at runtime.
-    pub fn new() -> Option<Self> {
-        let actual = find_module_base(DLL_NAME)?;
+    /// Retrieves a static reference to the `PatchContext`.
+    ///
+    /// This function ensures that the `PatchContext` is initialized only once
+    /// using a `OnceLock`. If the initialization fails, it will panic with the
+    /// message "PatchContext initialization failed". This context is used to
+    /// adjust static addresses to runtime-corrected addresses.
+
+    pub fn get() -> Option<&'static PatchContext> {
+        if let Some(ctx) = PATCH_CONTEXT.get() {
+            Some(ctx)
+        } else {
+            let ctx = PatchContext::new()?;
+            PATCH_CONTEXT.set(ctx).ok()?; // handles race-condition safety
+            PATCH_CONTEXT.get()
+        }
+    }
+
+    /// Creates a new `PatchContext` by calculating the delta between the
+    /// loaded module's base address and the preferred base address.
+    ///
+    /// This function attempts to find the base address of the MSN Chat Control
+    /// using `find_module_base`. If successful, it calculates the difference
+    /// (delta) between the actual base address and the preferred base address.
+    /// This delta is used for adjusting static addresses to their correct
+    /// runtime equivalents. Returns `Some(PatchContext)` if the base address
+    /// is found, otherwise returns `None`.
+
+    fn new() -> Option<Self> {
+        let actual: usize = find_module_base(DLL_NAME)?;
         Some(Self {
             delta: actual.wrapping_sub(PREFERRED_BASE_ADDRESS),
         })
     }
 
-    /// Adjusts a static address (e.g. from IDA) into a runtime-corrected address.
+    /// Adjusts a static address to the correct runtime address using the
+    /// delta calculated when this `PatchContext` was created.
+    ///
+    /// This function takes a static address (i.e. an address found in the
+    /// disassembly of the library) and adds the delta to it to obtain
+    /// the correct runtime address. The delta is the difference between
+    /// the preferred base address (used for static analysis) and the
+    /// actual base address of the loaded module.
+
     pub fn adjust(&self, static_addr: usize) -> usize {
         static_addr.wrapping_add(self.delta)
     }

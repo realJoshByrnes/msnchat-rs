@@ -2,4 +2,12 @@
 target = "i686-pc-windows-msvc"
 
 [target.i686-pc-windows-msvc]
-rustflags = ["-C", "link-args=/NXCOMPAT:NO"]
+rustflags = [
+    # Disable DEP compatibility to match target control module
+    # MSNChat45.ocx was built without /NXCOMPAT, so our binary must mirror that
+    "-C", "link-args=/NXCOMPAT:NO",
+
+    # Restrict virtual address space to 2GB (no Large Address Awareness)
+    # This ensures all JMP rel32 instructions remain within addressable range for our patcher
+    "-C", "link-args=/LARGEADDRESSAWARE:NO", # Our patcher user JMP rel32, and can't target all possible 4gb of user space
+]

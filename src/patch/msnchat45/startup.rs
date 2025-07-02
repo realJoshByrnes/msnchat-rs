@@ -14,10 +14,10 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-use crate::patch::{msnchat45::reloc::PatchContext, utils::patch_bytes};
+use crate::patch::msnchat45::{commands, reloc::PatchContext};
 
 /// Applies necessary patches to the MSN Chat Control at runtime.
-/// 
+///
 /// This function attempts to locate the base address of the DLL and applies
 /// specific byte patches to it. The `PatchContext` is used to resolve the
 /// actual base address and adjust any static addresses accordingly. If the
@@ -27,7 +27,7 @@ use crate::patch::{msnchat45::reloc::PatchContext, utils::patch_bytes};
 
 pub fn apply_patches() {
     let dll_name = "MSNChat45.ocx";
-    if let Some(ctx) = PatchContext::new() {
+    if let Some(ctx) = PatchContext::get() {
         #[cfg(debug_assertions)]
         println!(
             "Found module base for {}: {:#010x}",
@@ -35,8 +35,8 @@ pub fn apply_patches() {
             ctx.adjust(0x37200000)
         );
         unsafe {
-            // TODO: Add patches
-            patch_bytes(ctx.adjust(0x3720006c), &[0x44, 0x4F, 0x54]); // Writing "DOS" where "DOS" was to suppress warnings. 
+            commands::init(ctx.clone());
+            commands::version::init(&ctx);
         }
     } else {
         #[cfg(debug_assertions)]
