@@ -14,14 +14,31 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-use crate::PSTR;
-use windows::Win32::Foundation::{ERROR_ALREADY_EXISTS, HMODULE};
-use windows::Win32::Storage::FileSystem::{CreateDirectoryA, GetTempPathA};
+use windows::{core::PSTR, Win32::{Foundation::{ERROR_ALREADY_EXISTS, HMODULE}, Storage::FileSystem::{CreateDirectoryA, GetTempPathA}}};
 
-#[unsafe(no_mangle)]
-pub extern "stdcall" fn get_resdll_storage(_: HMODULE, lp_filename: PSTR, n_size: u32) -> () {
-    // Replacement for GetModuleFileNameA called at 0x3721481E
-    // Original resulted (by default) in "C:\Windows\Downloaded Program Files\", which requires access priveliges.
+use crate::patch::{
+    msnchat45::{reloc::PatchContext, shared::is_allowed_domain},
+    utils::make_call_rel32,
+};
+
+pub fn init(ctx: &PatchContext) {
+    make_call_rel32(ctx.adjust(0x372147F3), is_allowed_domain as usize);
+    make_call_rel32(ctx.adjust(0x3721481E), get_cache_folder as usize);
+}
+
+/// Replacement for GetModuleFileNameA called at 0x3721481E
+///
+/// The original resulted (by default) in "C:\Windows\Downloaded Program Files\MSNChat45.ocx", which requires priveliges.
+///
+/// This function writes the path for the ResDLL storage location to `lp_filename` and returns.
+///
+/// Note: The caller must ensure that `lp_filename` points to a buffer of at least `n_size` bytes in size.
+///
+/// # Safety
+///
+/// This function is safe to call from any thread context.
+
+pub extern "stdcall" fn get_cache_folder(_: HMODULE, lp_filename: PSTR, n_size: u32) -> () {
     unsafe {
         let slice = std::slice::from_raw_parts_mut(lp_filename.as_ptr(), n_size as usize);
 
@@ -41,14 +58,17 @@ pub extern "stdcall" fn get_resdll_storage(_: HMODULE, lp_filename: PSTR, n_size
                 Err(e) => e.code() == ERROR_ALREADY_EXISTS.into(),
             };
             if result {
+                #[cfg(debug_assertions)]
                 println!(
                     "ResDLL storage location: {}",
                     lp_filename.to_string().unwrap()
                 );
             } else {
+                #[cfg(debug_assertions)]
                 eprintln!("Error: Couldn't create directory for Resource DLL.");
             }
         } else {
+            #[cfg(debug_assertions)]
             eprintln!("Error: Not enough buffer space for Resource DLL directory.");
         }
     }

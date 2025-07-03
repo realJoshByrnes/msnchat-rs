@@ -14,10 +14,24 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-pub mod commands;
-mod ctcp;
-pub mod params;
-pub mod shared;
+use crate::PCSTR;
 
-pub mod reloc;
-pub mod startup;
+/// Called by the Chat Control to determine if a domain is allowed.
+///
+/// The Chat Control has a list of "known" TLDs that are allowed by default:
+/// * msn.com
+/// * moonport.com
+/// * microsoft.com
+/// * msn-int.com
+///
+/// The function should return true if the domain is allowed, and false if it is
+/// not.
+// TODO: Also used by sub_3722A0F2
+
+pub extern "cdecl" fn is_allowed_domain(buggy_tld: PCSTR) -> bool {
+    #[cfg(debug_assertions)]
+    println!("Approved domain: {}", unsafe {
+        buggy_tld.to_string().unwrap()
+    });
+    return true;
+}

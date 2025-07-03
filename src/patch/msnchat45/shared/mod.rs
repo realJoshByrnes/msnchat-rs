@@ -14,10 +14,6 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-pub mod commands;
-mod ctcp;
-pub mod params;
-pub mod shared;
+mod is_allowed_domain;
 
-pub mod reloc;
-pub mod startup;
+pub use is_allowed_domain::is_allowed_domain;

@@ -14,20 +14,12 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-use crate::PCSTR;
+use crate::patch::msnchat45::reloc::PatchContext;
 
-/// Called by the OCX to determine if a TLD is allowed.
-/// The buggy TLD is the last two parts of a domain, irrelevant of actual TLD.
-///
-/// The OCX has a list of "known" TLDs that are allowed. If the domain
-/// being checked does not have one of these TLDs, the OCX will call
-/// this function to determine if the unknown TLD is allowed.
-///
-/// The function should return 1 if the TLD is allowed, and 0 if it is
-/// not.
-pub extern "cdecl" fn check_buggy_tld_is_allowed(buggy_tld: PCSTR) -> i32 {
-    println!("Approved (buggy) TLD from OCX: {}", unsafe {
-        buggy_tld.to_string().unwrap()
-    });
-    return 1;
+pub mod resdll;
+pub mod whisper_window;
+
+pub fn init(ctx: &PatchContext) {
+    resdll::init(ctx);
+    whisper_window::init(ctx);
 }

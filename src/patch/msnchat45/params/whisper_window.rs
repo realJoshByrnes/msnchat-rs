@@ -14,10 +14,11 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-pub mod commands;
-mod ctcp;
-pub mod params;
-pub mod shared;
+use crate::patch::{
+    msnchat45::{reloc::PatchContext, shared::is_allowed_domain},
+    utils::make_call_rel32,
+};
 
-pub mod reloc;
-pub mod startup;
+pub fn init(ctx: &PatchContext) {
+    make_call_rel32(ctx.adjust(0x3721A549), is_allowed_domain as usize);
+}
