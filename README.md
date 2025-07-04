@@ -32,6 +32,7 @@ original never envisioned.
 - ✅ Patched `WhisperContent` to accept content from any origin
 - ✅ Updated `ResDLL` caching path to `%TEMP%/msnchat-rs.cache/`
 - ✅ Allowed loading of `ResDLL` assets from arbitrary domains
+- ✅ Re-enabled automatic URL launching via default browser
 
 ---
 
