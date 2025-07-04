@@ -190,6 +190,14 @@ fn main() -> Result<()> {
             println!("Successfully set property on ActiveX control.");
         }
 
+        let base_url = "http://chat.msn.com/\0";
+        let hr = set_string_property(&dispatch, "BaseURL", base_url);
+        if hr.is_err() {
+            eprintln!("Failed to set property on ActiveX control: {:?}", hr);
+        } else {
+            println!("Successfully set property on ActiveX control.");
+        }
+
         let resource_dll = "https://web.archive.org/web/20120410044420if_/http://fdl.msn.com/public/chat/MsnChat40en-us.cab#Version=9,2,310,202\0";
         let hr = set_string_property(&dispatch, "ResDLL", resource_dll);
         if hr.is_err() {

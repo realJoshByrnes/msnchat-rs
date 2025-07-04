@@ -14,10 +14,11 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-pub mod commands;
+mod commands;
 mod ctcp;
-pub mod params;
-pub mod shared;
+mod params;
+mod shared;
+mod url;
 
-pub mod reloc;
+mod reloc;
 pub mod startup;

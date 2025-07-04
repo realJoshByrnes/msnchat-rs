@@ -19,5 +19,7 @@ use crate::patch::msnchat45::reloc::PatchContext;
 mod version;
 
 pub unsafe fn init(ctx: &PatchContext) {
-    unsafe { version::init(ctx); }
+    unsafe {
+        version::init(ctx);
+    }
 }

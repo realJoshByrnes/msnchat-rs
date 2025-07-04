@@ -14,18 +14,10 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-use crate::patch::{msnchat45::reloc::PatchContext, utils::patch_bytes};
+use crate::patch::msnchat45::reloc::PatchContext;
 
-pub unsafe fn init(ctx: &PatchContext) {
-    unsafe {
-        disable_oper_check(ctx);
-    }
-}
+mod navigate;
 
-/// Disables the IRC operator check in the CTCP version response.
-///
-/// The CTCP version response will now always be sent, regardless of whether the
-/// user is an IRC operator or not.
-pub unsafe fn disable_oper_check(ctx: &PatchContext) {
-    unsafe { patch_bytes(ctx.adjust(0x3722E83B), &[0x90, 0x90, 0x90, 0x90]) };
+pub fn init(ctx: &PatchContext) {
+    navigate::init(ctx);
 }

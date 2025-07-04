@@ -14,7 +14,13 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-use windows::{core::PSTR, Win32::{Foundation::{ERROR_ALREADY_EXISTS, HMODULE}, Storage::FileSystem::{CreateDirectoryA, GetTempPathA}}};
+use windows::{
+    Win32::{
+        Foundation::{ERROR_ALREADY_EXISTS, HMODULE},
+        Storage::FileSystem::{CreateDirectoryA, GetTempPathA},
+    },
+    core::PSTR,
+};
 
 use crate::patch::{
     msnchat45::{reloc::PatchContext, shared::is_allowed_domain},
