@@ -2,6 +2,9 @@
 
 **Pure Rust ActiveX container for the MSN Chat Control**
 
+![image](https://github.com/user-attachments/assets/c803e090-9a1c-4cb7-b895-4b4a88eeef02)
+
+
 `msnchat-rs` is a modern reimplementation and preservation effort for the legacy
 **MSN Chat Control** (specifically `MSNChat45.ocx`, last compiled on October 25,
 2003). Over the years, changes in the Windows ecosystem and the deprecation of
