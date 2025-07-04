@@ -105,6 +105,7 @@ pub fn encode_utf16z(str: &str) -> Vec<u16> {
 /// This assumes the distance between src and dst is within ±2 GB.
 
 pub fn make_jmp_rel32(addr: usize, dst: usize) -> () {
+    #[cfg(debug_assertions)]
     println!("Patching 0x{:08X} with JMP rel32 to 0x{:08X}", addr, dst);
     let offset = (dst as isize).wrapping_sub((addr + 5) as isize);
     let rel = (offset as i32).to_le_bytes();
@@ -115,6 +116,7 @@ pub fn make_jmp_rel32(addr: usize, dst: usize) -> () {
 /// This assumes the distance between src and dst is within ±2 GB.
 
 pub fn make_call_rel32(addr: usize, dst: usize) -> () {
+    #[cfg(debug_assertions)]
     println!("Patching 0x{:08X} with CALL rel32 to 0x{:08X}", addr, dst);
     let offset = (dst as isize).wrapping_sub((addr + 5) as isize);
     let rel = (offset as i32).to_le_bytes();

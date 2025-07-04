@@ -58,6 +58,7 @@ extern "thiscall" fn command_handler(
         let os_string = OsString::from_wide(slice);
         let string = os_string.to_string_lossy().into_owned();
 
+        #[cfg(debug_assertions)]
         println!("Command entered: {}", string);
         match string.to_ascii_lowercase().as_str() {
             "/jd" => {

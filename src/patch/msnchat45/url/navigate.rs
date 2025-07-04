@@ -16,7 +16,7 @@
 
 use windows::Win32::UI::{
     Shell::ShellExecuteW,
-    WindowsAndMessaging::{SHOW_WINDOW_CMD, SW_SHOWNORMAL},
+    WindowsAndMessaging::{SW_SHOWNORMAL},
 };
 
 use crate::{
@@ -26,7 +26,7 @@ use crate::{
 };
 
 pub fn init(ctx: &PatchContext) {
-    make_jmp_rel32(0x3721783C, handle_navigate as usize);
+    make_jmp_rel32(ctx.adjust(0x3721783C), handle_navigate as usize);
 }
 
 // This is a stopgap, see https://github.com/realJoshByrnes/msnchat-rs/issues/10
