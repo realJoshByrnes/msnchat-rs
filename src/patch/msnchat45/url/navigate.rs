@@ -14,10 +14,7 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-use windows::Win32::UI::{
-    Shell::ShellExecuteW,
-    WindowsAndMessaging::{SW_SHOWNORMAL},
-};
+use windows::Win32::UI::{Shell::ShellExecuteW, WindowsAndMessaging::SW_SHOWNORMAL};
 
 use crate::{
     PCWSTR,
@@ -50,7 +47,8 @@ extern "thiscall" fn handle_navigate(
 
         // Special fix for /credits command (archived at archive.org)
         if url == "http://communities.msn.com/MSNChatTeam/" {
-            url = "https://web.archive.org/web/20050603210240if_/http://groups.msn.com/msnchatteam".to_string();
+            url = "https://web.archive.org/web/20050603210240if_/http://groups.msn.com/msnchatteam"
+                .to_string();
         }
 
         // Convert to PCWSTR

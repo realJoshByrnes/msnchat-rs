@@ -25,7 +25,6 @@ original never envisioned.
 
 - ✅ Modified `CTCP VERSION` to reply to all users
 - ✅ Enhanced `/version` command to display msnchat-rs version
-- ❌ ~~IRCVERS client signature override~~ (temporarily removed)
 - ❌ ~~Socket creation logic updated for dual-stack IPv6~~ (temporarily removed)
 - ❌ ~~Server field patched to accept IPv6 hostnames~~ (temporarily removed)
 - ✅ Introduced internal **command hook system** for user-defined commands
@@ -33,6 +32,7 @@ original never envisioned.
 - ✅ Updated `ResDLL` caching path to `%TEMP%/msnchat-rs.cache/`
 - ✅ Allowed loading of `ResDLL` assets from arbitrary domains
 - ✅ Re-enabled automatic URL launching via default browser
+- ✅ Modified `CTCP VERSION` reply to include project name and version
 
 ---
 
