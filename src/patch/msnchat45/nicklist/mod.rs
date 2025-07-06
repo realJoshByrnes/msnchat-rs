@@ -14,12 +14,10 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-mod commands;
-mod ctcp;
-mod nicklist;
-mod params;
-mod shared;
-mod url;
+use crate::patch::msnchat45::reloc::PatchContext;
 
-mod reloc;
-pub mod startup;
+mod menu;
+
+pub fn init(ctx: &PatchContext) {
+    menu::init(ctx);
+}

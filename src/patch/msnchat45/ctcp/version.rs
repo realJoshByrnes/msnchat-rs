@@ -43,7 +43,10 @@ pub unsafe fn patch_version_reply(ctx: &PatchContext) {
     let addr = ctx.adjust(0x3722E85B);
     let dst = PATCHED_CTCP_VERSION_INCLUDING_IRC_VERSION.as_ptr() as usize;
     #[cfg(debug_assertions)]
-    println!("Patching 0x{:08X} with MOV EDI, imm32 to 0x{:08X}", addr, dst);
+    println!(
+        "Patching 0x{:08X} with MOV EDI, imm32 to 0x{:08X}",
+        addr, dst
+    );
     let rel = dst.to_le_bytes();
     let bytes = [0xBF, rel[0], rel[1], rel[2], rel[3]];
     unsafe { patch_bytes(addr, &bytes) };

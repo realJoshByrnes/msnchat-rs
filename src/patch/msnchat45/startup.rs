@@ -14,7 +14,7 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-use crate::patch::msnchat45::{commands, ctcp, params, reloc::PatchContext, url};
+use crate::patch::msnchat45::{commands, ctcp, nicklist, params, reloc::PatchContext, url};
 
 /// Applies necessary patches to the MSN Chat Control at runtime.
 ///
@@ -40,6 +40,7 @@ pub fn apply_patches() {
             ctcp::init(ctx);
             url::init(&ctx);
             params::init(&ctx);
+            nicklist::init(&ctx);
         }
     } else {
         #[cfg(debug_assertions)]
