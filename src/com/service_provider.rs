@@ -66,16 +66,54 @@ pub unsafe extern "system" fn release(this: *mut c_void) -> u32 {
 // --- IServiceProvider methods (stubs) ---
 unsafe extern "system" fn query_service(
     _this: *mut c_void,
-    _guid_service: *const GUID,
-    _riid: *const GUID,
-    _ppv_object: *mut *mut c_void,
+    guid_service: *const GUID,
+    riid: *const GUID,
+    ppv_object: *mut *mut c_void,
 ) -> HRESULT {
     println!("*** IServiceProvider::QueryService called");
+    unsafe {
+        if !guid_service.is_null() {
+            println!(
+                "  guidService: {{{:08X}-{:04X}-{:04X}-{:02X}{:02X}-{:02X}{:02X}{:02X}{:02X}{:02X}{:02X}}}",
+                (*guid_service).data1,
+                (*guid_service).data2,
+                (*guid_service).data3,
+                (*guid_service).data4[0],
+                (*guid_service).data4[1],
+                (*guid_service).data4[2],
+                (*guid_service).data4[3],
+                (*guid_service).data4[4],
+                (*guid_service).data4[5],
+                (*guid_service).data4[6],
+                (*guid_service).data4[7]
+            );
+        } else {
+            println!("  guidService: NULL");
+        }
 
-    if !_ppv_object.is_null() {
-        unsafe { *_ppv_object = std::ptr::null_mut() };
+        if !riid.is_null() {
+            println!(
+                "  riid:        {{{:08X}-{:04X}-{:04X}-{:02X}{:02X}-{:02X}{:02X}{:02X}{:02X}{:02X}{:02X}}}",
+                (*riid).data1,
+                (*riid).data2,
+                (*riid).data3,
+                (*riid).data4[0],
+                (*riid).data4[1],
+                (*riid).data4[2],
+                (*riid).data4[3],
+                (*riid).data4[4],
+                (*riid).data4[5],
+                (*riid).data4[6],
+                (*riid).data4[7]
+            );
+        } else {
+            println!("  riid: NULL");
+        }
+
+        if !ppv_object.is_null() {
+            *ppv_object = std::ptr::null_mut();
+        }
     }
-
     E_NOINTERFACE
 }
 

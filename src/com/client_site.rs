@@ -18,7 +18,7 @@ use std::os::raw::c_void;
 
 // use windows::core::*;
 use windows::Win32::Foundation::*;
-use windows::Win32::System::Com::IDispatch;
+use windows::Win32::System::Com::{IDispatch, IServiceProvider};
 use windows::Win32::System::Ole::{
     IOleClientSite, IOleControlSite, IOleInPlaceSite, IOleInPlaceSiteEx,
 };
@@ -91,13 +91,13 @@ unsafe extern "system" fn query_interface(
                 S_OK
             }
             // // TODO: This is not working yet.
-            // &IServiceProvider::IID => {
-            //     println!("client_site::QueryInterface: {:?} (IServiceProvider)", riid);
-            //     let service_provider = (*shared).service_provider;
-            //     *ppv = service_provider as *mut c_void;
-            //     crate::com::service_provider::add_ref(service_provider as *mut c_void);
-            //     S_OK
-            // }
+            &IServiceProvider::IID => {
+                println!("client_site::QueryInterface: {:?} (IServiceProvider)", riid);
+                let service_provider = (*shared).service_provider;
+                *ppv = service_provider as *mut c_void;
+                crate::com::service_provider::add_ref(service_provider as *mut c_void);
+                S_OK
+            }
             _ => {
                 println!("client_site::QueryInterface: {:?}", riid);
                 *ppv = std::ptr::null_mut();

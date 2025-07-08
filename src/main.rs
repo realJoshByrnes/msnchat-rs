@@ -30,10 +30,10 @@ use windows::core::*;
 
 #[macro_use]
 mod com;
+mod chat_options;
+mod control_socket;
 mod hacks;
 mod patch;
-
-mod control_socket;
 
 use hacks::init_hacks;
 
@@ -46,6 +46,7 @@ const WINDOW_CLASS_NAME: &[u8] = b"MyActiveXHostWindow\0";
 static mut IN_PLACE_OBJECT: Option<IOleInPlaceObject> = None;
 
 fn main() -> Result<()> {
+    unsafe { crate::chat_options::register_window_class()? };
     // Register the Window Class
     let h_instance = unsafe { GetModuleHandleA(None)? };
 

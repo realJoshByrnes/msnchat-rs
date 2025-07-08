@@ -23,6 +23,7 @@ use windows::{
 pub mod version;
 
 use crate::{
+    chat_options,
     patch::{msnchat45::reloc::PatchContext, utils::make_call_rel32},
     w,
 };
@@ -86,6 +87,10 @@ extern "thiscall" fn command_handler(
                     0,
                 );
                 return false;
+            }
+            "/options" => {
+                let _ = chat_options::show_settings_dialog();
+                return true; // This is ugly because it doesn't clear the text, but false also causes us to lose focus.
             }
             _ => {
                 // Unhandled command; Re-use original handler
