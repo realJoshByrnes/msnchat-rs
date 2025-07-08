@@ -14,15 +14,17 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
+use msnchat_bindings::ChatFrame;
 use rand::Rng;
 use windows::Win32::Foundation::*;
 use windows::Win32::Graphics::Gdi::*;
 use windows::Win32::System::Com::{
-    CLSCTX_INPROC_SERVER, COINIT_APARTMENTTHREADED, CoCreateInstance, CoInitializeEx,
-    CoUninitialize, IDispatch,
+    COINIT_APARTMENTTHREADED, CoInitializeEx, CoUninitialize, IDispatch,
 };
 use windows::Win32::System::LibraryLoader::GetModuleHandleA;
-use windows::Win32::System::Ole::{IOleInPlaceObject, IOleInPlaceSiteEx, OLEIVERB_SHOW};
+use windows::Win32::System::Ole::{
+    IOleClientSite, IOleInPlaceObject, IOleInPlaceSiteEx, IOleObject, OLEIVERB_SHOW,
+};
 use windows::Win32::UI::WindowsAndMessaging::*;
 use windows::core::*;
 
@@ -35,7 +37,6 @@ mod control_socket;
 
 use hacks::init_hacks;
 
-use crate::com::helpers::set_string_property;
 use crate::com::shared::create_host_wrappers;
 use crate::patch::msnchat45::startup::apply_patches;
 
@@ -45,14 +46,6 @@ const WINDOW_CLASS_NAME: &[u8] = b"MyActiveXHostWindow\0";
 static mut IN_PLACE_OBJECT: Option<IOleInPlaceObject> = None;
 
 fn main() -> Result<()> {
-    // Initialize COM
-    unsafe {
-        let hr = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
-        if !hr.is_ok() {
-            return Err(Error::from(hr));
-        }
-    }
-
     // Register the Window Class
     let h_instance = unsafe { GetModuleHandleA(None)? };
 
@@ -100,33 +93,47 @@ fn main() -> Result<()> {
         Err(_e) => return Err(Error::from_win32()),
     };
 
-    // Create the ActiveX Control
+    // Initialize COM - We need this before using any COM objects
     unsafe {
-        let ole_object_result = create_activex_control(hwnd, h_instance);
-        let embedded_ole_object = match ole_object_result {
-            Ok(obj) => {
-                println!("ActiveX control instantiated successfully!");
-                obj
-            }
-            Err(e) => {
-                eprintln!("Failed to instantiate ActiveX control: {:?}", e);
-                // Handle error, maybe return from main or display error message
-                return Err(e);
-            }
-        };
+        let hr = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
+        if hr.is_err() {
+            return Err(Error::from(hr));
+        }
+    }
 
-        init_hacks(); // Initialize any hacks or custom functionality
-        apply_patches();
+    let chat_frame = ChatFrame::create()?;
 
-        // Use the correct function to create your host site with the proper vtables
-        // Create the wrappers and shared state
-        //let wrappers = create_host_wrappers();
-        // NOTE: KEEP FOREVER!!!
-        let wrappers = Box::new(create_host_wrappers(hwnd));
+    #[cfg(debug_assertions)]
+    println!("Created ActiveX control.");
+
+    // As soon as we load the Chat Control, we should be doing patches
+    init_hacks();
+    apply_patches();
+
+    let _ = chat_frame.set_server(Some("dir.irc7.com:6667"));
+    let _ = chat_frame.set_nick_name(Some("JD"));
+    let _ = chat_frame.set_room_name(Some("The Lobby"));
+    let _ = chat_frame.set_base_url(Some("http://chat.msn.com/"));
+    let _ = chat_frame.set_res_dll(Some("https://web.archive.org/web/20120410044420if_/http://fdl.msn.com/public/chat/MsnChat40en-us.cab#Version=9,2,310,202"));
+    let _ = chat_frame.set_message_of_the_day(Some("This is the MOTD"));
+    let _ = chat_frame.set_audit_message(Some("Your IP is not <b>%1</b>."));
+    let _ =
+        chat_frame.set_whisper_content(Some("http://info.cern.ch/hypertext/WWW/TheProject.html"));
+
+    // Random nickname generator to prevent clashes during testing.
+    let random_number = rand::rng().random_range(1..=9999); // 1 to 100 inclusive
+    let nickname = format!("User{}-rs\0", random_number);
+    let _ = chat_frame.set_nick_name(Some(&nickname));
+
+    let embedded_ole_object = chat_frame.cast::<IOleObject>()?;
+    // NOTE: KEEP FOREVER!!!
+    let wrappers = Box::new(create_host_wrappers(hwnd));
+    unsafe {
+        let ole_client_site = IOleClientSite::from_raw(wrappers.client_site as *mut _);
+        embedded_ole_object.SetClientSite(&ole_client_site)?;
 
         // Pass wrappers.client_site to SetClientSite
-        let ole_client_site =
-            windows::Win32::System::Ole::IOleClientSite::from_raw(wrappers.client_site as *mut _);
+        let ole_client_site = IOleClientSite::from_raw(wrappers.client_site as *mut _);
 
         embedded_ole_object.SetClientSite(&ole_client_site)?;
 
@@ -152,68 +159,6 @@ fn main() -> Result<()> {
         if !hr.is_ok() || dispatch_ptr.is_null() {
             return Err(Error::from(hr));
         }
-        let dispatch = IDispatch::from_raw(dispatch_ptr as *mut _);
-
-        // The OCX won't initialize without server set.
-        let server = "dir.irc7.com:6667\0";
-        let hr = set_string_property(&dispatch, "Server", server);
-        if hr.is_err() {
-            eprintln!("Failed to set property on ActiveX control: {:?}", hr);
-        } else {
-            println!("Successfully set property on ActiveX control.");
-        }
-
-        // The OCX will (Null POinter) trying to read this if unset when loading a Whisper Window
-        let base = "\0";
-        let hr = set_string_property(&dispatch, "BaseUrl", base);
-        if hr.is_err() {
-            eprintln!("Failed to set property on ActiveX control: {:?}", hr);
-        } else {
-            println!("Successfully set property on ActiveX control.");
-        }
-
-        let mut rng = rand::rng();
-        let random_number: u32 = rng.random_range(1..=9999); // 1 to 100 inclusive
-        let nickname = format!("User{}-rs\0", random_number);
-        let hr = set_string_property(&dispatch, "NickName", &nickname);
-        if hr.is_err() {
-            eprintln!("Failed to set property on ActiveX control: {:?}", hr);
-        } else {
-            println!("Successfully set property on ActiveX control.");
-        }
-
-        let room = "The Lobby\0";
-        let hr = set_string_property(&dispatch, "RoomName", room);
-        if hr.is_err() {
-            eprintln!("Failed to set property on ActiveX control: {:?}", hr);
-        } else {
-            println!("Successfully set property on ActiveX control.");
-        }
-
-        let base_url = "http://chat.msn.com/\0";
-        let hr = set_string_property(&dispatch, "BaseURL", base_url);
-        if hr.is_err() {
-            eprintln!("Failed to set property on ActiveX control: {:?}", hr);
-        } else {
-            println!("Successfully set property on ActiveX control.");
-        }
-
-        let resource_dll = "https://web.archive.org/web/20120410044420if_/http://fdl.msn.com/public/chat/MsnChat40en-us.cab#Version=9,2,310,202\0";
-        let hr = set_string_property(&dispatch, "ResDLL", resource_dll);
-        if hr.is_err() {
-            eprintln!("Failed to set property on ActiveX control: {:?}", hr);
-        } else {
-            println!("Successfully set property on ActiveX control.");
-        }
-
-        let locale = "es-mx\0";
-        let _ = set_string_property(&dispatch, "Locale", locale);
-        let _ = set_string_property(&dispatch, "Market", locale);
-        let _ = set_string_property(
-            &dispatch,
-            "WhisperContent",
-            "http://info.cern.ch/hypertext/WWW/TheProject.html",
-        );
 
         embedded_ole_object.DoVerb(
             OLEIVERB_SHOW.0,
@@ -301,27 +246,5 @@ extern "system" fn wnd_proc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM
             // Default message processing
             unsafe { DefWindowProcA(hwnd, msg, wparam, lparam) }
         }
-    }
-}
-
-fn create_activex_control(
-    _parent_hwnd: HWND,
-    _h_instance: HMODULE,
-) -> Result<windows::Win32::System::Ole::IOleObject> {
-    let clsid_web_browser = &windows::core::GUID::from_u128(
-        0xF58E1CEF_A068_4c15_BA5E_587CAF3EE8C6, // MSN Chat Control CLSID
-    );
-
-    // Create an instance of the control
-    use windows::Win32::System::Ole::IOleObject;
-
-    unsafe {
-        // Create an instance of the MSN Chat control and get IOleObject directly
-        let ole_object: IOleObject =
-            CoCreateInstance(clsid_web_browser, None, CLSCTX_INPROC_SERVER)?;
-
-        print!("Created ActiveX control: {:?}\n", ole_object);
-
-        Ok(ole_object)
     }
 }

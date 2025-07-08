@@ -1,6 +1,6 @@
 [package]
 name = "msnchat-rs"
-version = "0.2.5"
+version = "0.3.0"
 edition = "2024"
 
 [build-dependencies]
@@ -10,6 +10,7 @@ winres = "0.1"
 
 [dependencies]
 rand = "0.9"
+msnchat-bindings = { git = "https://github.com/msnchatinternals/msnchat-bindings.git", branch = "main" }
 
 [dependencies.windows]
 version = "0.61"

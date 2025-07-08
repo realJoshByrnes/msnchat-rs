@@ -2,7 +2,7 @@
 <assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">
     <assemblyIdentity type="win32" name="byrnes.jd.msnchat-rs" version="@VERSION@" processorArchitecture="*"/>
     <file name="MsnChat45.ocx" hash="4C0468A5A428D3D3062D9C87D2F22DBC0E23D739" hashalg="SHA1">
-        <!-- <comClass description="MSN Chat Control 4.5" clsid="{F58E1CEF-A068-4c15-BA5E-587CAF3EE8C6}"/> -->
-        <!-- <comClass description="MSN Chat Control 4.5 Settings" clsid="{FA980E7E-9E44-4d2f-B3C2-9A5BE42525F8}"/> -->
+        <comClass description="MSN Chat Control 4.5" clsid="{F58E1CEF-A068-4c15-BA5E-587CAF3EE8C6}"/>
+        <comClass description="MSN Chat Control 4.5 Settings" clsid="{FA980E7E-9E44-4d2f-B3C2-9A5BE42525F8}"/>
     </file>
 </assembly>
