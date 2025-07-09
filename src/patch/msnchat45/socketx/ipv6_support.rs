@@ -228,7 +228,8 @@ pub extern "stdcall" fn validate_server_address(
         0 => "dir.irc7.com\0".to_string(), // We now provide a default!
         _ => pcstr_to_string(addr_and_port_in),
     };
-    let input = PCWSTR(string_to_wstr_vec(input.replace(" ", ":")).as_ptr());
+    let wide_input_vec = string_to_wstr_vec(input.replace(" ", ":"));
+    let input = PCWSTR(wide_input_vec.as_ptr());
 
     let allowed_net_string_types =
         NET_STRING_ANY_ADDRESS_NO_SCOPE | NET_STRING_ANY_SERVICE_NO_SCOPE;
