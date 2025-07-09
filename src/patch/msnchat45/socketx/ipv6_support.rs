@@ -42,6 +42,8 @@ use windows::Win32::{
 };
 use windows::core::{PCSTR, PCWSTR, PSTR, w};
 
+use crate::patch::{msnchat45::reloc::PatchContext, utils::make_jmp_rel32};
+
 const NET_STRING_IP_ADDRESS_NO_SCOPE: u32 =
     NET_STRING_IPV4_ADDRESS | NET_STRING_IPV6_ADDRESS_NO_SCOPE;
 const NET_STRING_ANY_ADDRESS_NO_SCOPE: u32 =
@@ -50,6 +52,14 @@ const NET_STRING_IP_SERVICE_NO_SCOPE: u32 =
     NET_STRING_IPV4_SERVICE | NET_STRING_IPV6_SERVICE_NO_SCOPE;
 const NET_STRING_ANY_SERVICE_NO_SCOPE: u32 =
     NET_STRING_NAMED_SERVICE | NET_STRING_IP_SERVICE_NO_SCOPE;
+
+pub fn init(ctx: &PatchContext) {
+    make_jmp_rel32(ctx.adjust(0x37232EB9), socket_try_ctor as usize);
+    make_jmp_rel32(ctx.adjust(0x37232FDD), recv_wrapper as usize);
+    make_jmp_rel32(ctx.adjust(0x37233000), send_wrapper as usize);
+    make_jmp_rel32(ctx.adjust(0x37232F1D), connect_wrapper as usize);
+    make_jmp_rel32(ctx.adjust(0x3722C405), validate_server_address as usize);
+}
 
 // We're replacing the functions that can be found in the Chat Control OCX.
 // We need to ensure we are returning what is expected from them.

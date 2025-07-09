@@ -31,11 +31,8 @@ use windows::core::*;
 #[macro_use]
 mod com;
 mod chat_options;
-mod control_socket;
-mod hacks;
 mod patch;
-
-use hacks::init_hacks;
+mod utils;
 
 use crate::com::shared::create_host_wrappers;
 use crate::patch::msnchat45::startup::apply_patches;
@@ -108,7 +105,6 @@ fn main() -> Result<()> {
     println!("Created ActiveX control.");
 
     // As soon as we load the Chat Control, we should be doing patches
-    init_hacks();
     apply_patches();
 
     let _ = chat_frame.set_server(Some("dir.irc7.com:6667"));

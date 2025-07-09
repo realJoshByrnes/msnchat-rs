@@ -14,13 +14,12 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-mod commands;
-mod ctcp;
-mod nicklist;
-mod params;
-mod shared;
-mod socketx;
-mod url;
+mod ipv6_support;
 
-mod reloc;
-pub mod startup;
+use crate::{patch::msnchat45::reloc::PatchContext, utils::ipv6::is_ipv6_enabled};
+
+pub fn init(ctx: &PatchContext) {
+    if is_ipv6_enabled() {
+        ipv6_support::init(ctx);
+    }
+}
