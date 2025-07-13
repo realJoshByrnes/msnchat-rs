@@ -25,8 +25,8 @@ original never envisioned.
 
 - ✅ Modified `CTCP VERSION` to reply to all users
 - ✅ Enhanced `/version` command to display msnchat-rs version
-- ❌ ~~Socket creation logic updated for dual-stack IPv6~~ (temporarily removed)
-- ❌ ~~Server field patched to accept IPv6 hostnames~~ (temporarily removed)
+- ✅ Socket creation logic updated for dual-stack IPv6
+- ✅ Server field patched to accept IPv6 hostnames
 - ✅ Introduced internal **command hook system** for user-defined commands
 - ✅ Patched `WhisperContent` to accept content from any origin
 - ✅ Updated `ResDLL` caching path to `%TEMP%/msnchat-rs.cache/`
