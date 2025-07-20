@@ -14,10 +14,12 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-use std::{ffi::OsString, os::windows::ffi::OsStringExt};
+use std::{
+    ffi::OsString,
+    os::windows::ffi::OsStringExt,
+};
 use windows::{
-    Win32::UI::WindowsAndMessaging::{MESSAGEBOX_STYLE, MessageBoxExW},
-    core::PCWSTR,
+    core::PCWSTR, Win32::UI::WindowsAndMessaging::{MessageBoxExW, MESSAGEBOX_STYLE}
 };
 
 pub mod version;
@@ -58,6 +60,9 @@ extern "thiscall" fn command_handler(
         let slice = std::slice::from_raw_parts(lp_wide_char_str.as_ptr(), lp_wide_char_str.len());
         let os_string = OsString::from_wide(slice);
         let string = os_string.to_string_lossy().into_owned();
+
+        // // HWND for the main richedit can be found at:
+        // let hwnd = *(pbstr.add(9268) as *const HWND);
 
         #[cfg(debug_assertions)]
         println!("Command entered: {}", string);
