@@ -14,14 +14,10 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-mod auth;
-mod commands;
-mod ctcp;
-mod nicklist;
-mod params;
-mod shared;
-mod socketx;
-mod url;
+mod gatekeeper;
 
-mod reloc;
-pub mod startup;
+use crate::patch::msnchat45::reloc::PatchContext;
+
+pub fn init(ctx: &PatchContext) {
+    gatekeeper::init(ctx);
+}
