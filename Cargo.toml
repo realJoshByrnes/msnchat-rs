@@ -5,16 +5,16 @@ edition = "2024"
 
 [build-dependencies]
 static_vcruntime = "2.0"
-windows-core = "0.61"
+windows-core = "0.62"
 winres = "0.1"
 
 [dependencies]
 rand = "0.9"
 msnchat-bindings = { git = "https://github.com/msnchatinternals/msnchat-bindings.git", branch = "main" }
-windows-core = "0.61"
+windows-core = "0.62"
 
 [dependencies.windows]
-version = "0.61"
+version = "0.62"
 features = [
     "Win32_Foundation",
     "Win32_Graphics_Gdi",

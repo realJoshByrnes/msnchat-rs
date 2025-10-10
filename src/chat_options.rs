@@ -39,7 +39,7 @@ pub unsafe fn register_window_class() -> Result<()> {
     };
 
     if unsafe { RegisterClassW(&wc) } == 0 {
-        return Err(Error::from_win32());
+        return Err(Error::from_thread());
     }
 
     Ok(())
@@ -71,7 +71,7 @@ impl DialogWindow {
             );
 
             if hwnd.is_err() {
-                return Err(Error::from_win32());
+                return Err(Error::from_thread());
             }
 
             let hwnd = hwnd.unwrap();

@@ -64,7 +64,7 @@ fn main() -> Result<()> {
 
     unsafe {
         if RegisterClassExA(&wc) == 0 {
-            return Err(Error::from_win32());
+            return Err(Error::from_thread());
         }
     }
 
@@ -88,7 +88,7 @@ fn main() -> Result<()> {
 
     let hwnd = match hwnd {
         Ok(h) => h,
-        Err(_e) => return Err(Error::from_win32()),
+        Err(_e) => return Err(Error::from_thread()),
     };
 
     // Initialize COM - We need this before using any COM objects
