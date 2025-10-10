@@ -14,12 +14,10 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-use std::{
-    ffi::OsString,
-    os::windows::ffi::OsStringExt,
-};
+use std::{ffi::OsString, os::windows::ffi::OsStringExt};
 use windows::{
-    core::PCWSTR, Win32::UI::WindowsAndMessaging::{MessageBoxExW, MESSAGEBOX_STYLE}
+    Win32::UI::WindowsAndMessaging::{MESSAGEBOX_STYLE, MessageBoxExW},
+    core::PCWSTR,
 };
 
 pub mod version;
