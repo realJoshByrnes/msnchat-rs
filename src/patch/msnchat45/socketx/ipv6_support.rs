@@ -42,7 +42,10 @@ use windows::Win32::{
 };
 use windows::core::{PCSTR, PCWSTR, PSTR, w};
 
-use crate::patch::{msnchat45::reloc::PatchContext, utils::make_jmp_rel32};
+use crate::patch::{
+    msnchat45::reloc::PatchContext,
+    utils::{make_call_rel32, make_jmp_rel32},
+};
 
 const NET_STRING_IP_ADDRESS_NO_SCOPE: u32 =
     NET_STRING_IPV4_ADDRESS | NET_STRING_IPV6_ADDRESS_NO_SCOPE;
@@ -55,10 +58,60 @@ const NET_STRING_ANY_SERVICE_NO_SCOPE: u32 =
 
 pub fn init(ctx: &PatchContext) {
     make_jmp_rel32(ctx.adjust(0x37232EB9), socket_try_ctor as usize);
-    make_jmp_rel32(ctx.adjust(0x37232FDD), recv_wrapper as usize);
+    //make_jmp_rel32(ctx.adjust(0x37232FDD), recv_wrapper as usize);
     make_jmp_rel32(ctx.adjust(0x37233000), send_wrapper as usize);
     make_jmp_rel32(ctx.adjust(0x37232F1D), connect_wrapper as usize);
     make_jmp_rel32(ctx.adjust(0x3722C405), validate_server_address as usize);
+    make_call_rel32(ctx.adjust(0x37232839), directory_parse_message as usize);
+    make_call_rel32(ctx.adjust(0x37231e58), channel_parse_message as usize);
+}
+
+pub extern "cdecl" fn directory_parse_message(
+    raw_message: PCSTR,
+    output_buffer: *mut std::ffi::c_void,
+) -> bool {
+    let ctx = PatchContext::get().unwrap();
+    let original_fn_ptr = ctx.adjust(0x372332ad);
+    parse_message_proxy(
+        raw_message,
+        output_buffer,
+        "dir".to_string(),
+        original_fn_ptr,
+    )
+}
+
+pub extern "cdecl" fn channel_parse_message(
+    raw_message: PCSTR,
+    output_buffer: *mut std::ffi::c_void,
+) -> bool {
+    let ctx = PatchContext::get().unwrap();
+    let original_fn_ptr = ctx.adjust(0x37233101);
+    parse_message_proxy(
+        raw_message,
+        output_buffer,
+        "chan".to_string(),
+        original_fn_ptr,
+    )
+}
+
+fn parse_message_proxy(
+    raw_message: PCSTR,
+    output_buffer: *mut std::ffi::c_void,
+    label: String,
+    original_fn_ptr: usize,
+) -> bool {
+    unsafe {
+        let message = raw_message
+            .as_bytes()
+            .iter()
+            .map(|&b| b as char)
+            .collect::<String>();
+        println!("[<- {}]: {}", label, message);
+
+        // We call the original function and return its result.
+        let original_fn: extern "cdecl" fn(_, _) -> _ = std::mem::transmute(original_fn_ptr);
+        original_fn(raw_message, output_buffer)
+    }
 }
 
 // We're replacing the functions that can be found in the Chat Control OCX.
@@ -199,13 +252,11 @@ pub extern "thiscall" fn send_wrapper(this: *mut c_void, buf: *const c_char, len
         let slice = std::slice::from_raw_parts(buf as *mut u8, len as usize);
 
         if slice.len() > 0 {
-            let printable = String::from_utf8_lossy(&slice[..slice.len() as usize]);
-            println!(
-                "[hook_send_proxy] SOCKET=0x{:X}, len={}, text=\"{}\"",
-                socket.0 as usize,
-                slice.len(),
-                printable
-            );
+            let printable = &slice[..slice.len() as usize]
+                .iter()
+                .map(|&b| b as char)
+                .collect::<String>();
+            println!("[-> out] {}", printable);
         }
 
         return send(socket, slice, SEND_RECV_FLAGS::default()) != -1

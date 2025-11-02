@@ -17,7 +17,7 @@
 use std::{ffi::OsString, os::windows::ffi::OsStringExt};
 use windows::{
     Win32::UI::WindowsAndMessaging::{MESSAGEBOX_STYLE, MessageBoxExW},
-    core::PCWSTR,
+    core::{BSTR, PCWSTR},
 };
 
 pub mod version;
@@ -94,6 +94,82 @@ extern "thiscall" fn command_handler(
             "/options" => {
                 let _ = chat_options::show_settings_dialog();
                 return true; // This is ugly because it doesn't clear the text, but false also causes us to lose focus.
+            }
+            "/test" => {
+                let maybe_richedit_writeline: extern "thiscall" fn(
+                    _,
+                    PCWSTR,
+                    i32,
+                    u32,
+                    u8,
+                    u8,
+                    *const u16,
+                    u32,
+                    i32,
+                ) -> i32 = std::mem::transmute(ctx.adjust(0x3722402B));
+
+                // Allocate a BSTR for the font name "Marlett" and call the original
+                // sequence used in the binary: this+4600, &word_37243E2C ("8"), 2,0,9,0,(int)v6,2,0
+                let v6 = BSTR::from("Marlett");
+                // Use the same 'this' pointer as the original snippet (this + 4600)
+                let _res = maybe_richedit_writeline(
+                    pbstr.wrapping_add(9200),
+                    w!("8"),
+                    2, // Indent level
+                    0,
+                    9, // (9 = gray)
+                    0,
+                    v6.as_ptr(), // Font name (BSTR ptr)
+                    2,           // (2 = symbol)
+                    0,
+                );
+
+                let _res = maybe_richedit_writeline(
+                    pbstr.wrapping_add(9200),
+                    w!("JD was here in 2025."),
+                    0,
+                    1,
+                    9,
+                    0,
+                    std::ptr::null(), // No custom font
+                    0,
+                    0,
+                );
+
+                let font = BSTR::from("Courier New");
+                let ascii_art = w!(
+                    "<color #BA55D3>;,,,             `       '             ,,,;</color>\r\n\
+<color #8A2BE2>`YES8888bo.       :     :       .od8888YES'</color>\r\n\
+<color #1E90FF>  888IO8DO88b.     :   :     .d8888I8DO88</color>\r\n\
+<color #00BFFF>  8LOVEY'  `Y8b.   `   '   .d8Y'  `YLOVE8</color>\r\n\
+<color #32CD32> jTHEE!  .db.  Yb. '   ' .dY  .db.  8THEE!</color>\r\n\
+<color #00FF00>   `888  Y88Y    `b ( ) d'    Y88Y  888'</color>\r\n\
+<color #FFFF00>    8MYb  '\"        ,',        \"'  dMY8</color>\r\n\
+<color #FFD700>   j8prECIOUSgf\"'   ':'   `\"?g8prECIOUSk</color>\r\n\
+<color #FF69B4>     'Y'   .8'     d' 'b     '8.   'Y'</color>\r\n\
+<color #FF4500>      !   .8' db  d'; ;`b  db '8.   !</color>\r\n\
+<color #FF6347>         d88  `'  8 ; ; 8  `'  88b</color>\r\n\
+<color #FF7F50>        d88Ib   .g8 ',' 8g.   dI88b</color>\r\n\
+<color #DC143C>       :888LOVE88Y'     'Y88LOVE888: </color>\r\n\
+<color #C71585>       '! THEE888'       `888THEE !'</color>\r\n\
+<color #DB7093>          '8Y  `Y         Y'  Y8'</color>\r\n\
+<color #DDA0DD>           Y                   Y</color>\r\n\
+<color #EE82EE>           !                   !</color>\r\n"
+                );
+
+                let _res = maybe_richedit_writeline(
+                    pbstr.wrapping_add(9200),
+                    ascii_art,
+                    0,             // Indent level
+                    0x07,          // Newline + preserve control chars + enable styling
+                    9,             // Base color (fallback)
+                    0,             // Style flags
+                    font.as_ptr(), // Fixed-width font
+                    0,             // Charset
+                    0,             // Apply default formatting
+                );
+
+                return false;
             }
             _ => {
                 // Unhandled command; Re-use original handler
