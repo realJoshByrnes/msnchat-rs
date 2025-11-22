@@ -1,0 +1,39 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+
+        {
+            "name": "Debug executable 'msnchat-rs'",
+            "type": "lldb",
+            "request": "launch",
+            "cargo": {
+                "args": [
+                    "run",
+                    "--bin=msnchat-rs"
+                ]
+            },
+            "args": [],
+            "initCommands": [
+                // Create a hook that runs ONLY on the first stop
+                // 1. Ignore the WOW64 exception forever
+                // 2. Delete this hook (so it doesn't auto-continue at your real breakpoints)
+                // 3. Auto-continue execution
+                "target stop-hook add -o \"process handle -s false -n false -p true 0x4000001f\" -o \"target stop-hook delete 1\" -o \"continue\""
+            ]
+        },
+        {
+            "name": "Debug unit tests in executable 'msnchat-rs'",
+            "type": "lldb",
+            "request": "launch",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--bin=msnchat-rs"
+                ]
+            }
+        }
+    ]
+}

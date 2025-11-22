@@ -223,8 +223,10 @@ extern "system" fn wnd_proc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM
             LRESULT(0)
         }
         WM_DESTROY => {
-            // Post a quit message when the window is closed
-            unsafe { PostQuitMessage(0) };
+            // Just exit the application (prevents error in Wow64AllocateTemp)
+            std::process::exit(0);
+            // // Post a quit message when the window is closed
+            // unsafe { PostQuitMessage(0) };
             LRESULT(0)
         }
         WM_SIZE => {
