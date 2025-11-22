@@ -29,12 +29,14 @@ extern "thiscall" fn use_gate_keeper_id(this: *mut u8, gate_keeper_id: *mut GUID
     let ctx = PatchContext::get().unwrap();
 
     if unsafe { *gate_keeper_id } == GUID::zeroed() {
+        #[cfg(debug_assertions)]
         eprintln!("Warning: GateKeeper ID was null!");
         match unsafe { CoCreateGuid() } {
             Ok(guid) => unsafe { *gate_keeper_id = guid },
             Err(e) => eprintln!("Failed to create GateKeeper ID: {:?}", e),
         }
     }
+    #[cfg(debug_assertions)]
     println!("Using GateKeeper ID: {:?}", unsafe { *gate_keeper_id });
 
     unsafe {

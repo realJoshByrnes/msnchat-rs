@@ -106,6 +106,7 @@ fn parse_message_proxy(
             .iter()
             .map(|&b| b as char)
             .collect::<String>();
+        #[cfg(debug_assertions)]
         println!("[<- {}]: {}", label, message);
 
         // We call the original function and return its result.
@@ -120,6 +121,7 @@ fn parse_message_proxy(
 #[unsafe(no_mangle)]
 pub extern "thiscall" fn connect_wrapper(this: *mut c_void, cp: PCSTR, u_short: u16) -> bool {
     unsafe {
+        #[cfg(debug_assertions)]
         println!(
             "[control_socket:connect_wrapper] Requested address: {}",
             cp.to_string().unwrap()
@@ -139,6 +141,7 @@ pub extern "thiscall" fn connect_wrapper(this: *mut c_void, cp: PCSTR, u_short: 
         let mut result: *mut ADDRINFOA = std::ptr::null_mut();
 
         if getaddrinfo(cp, port_cstr, Some(&hints), &mut result) != 0 || result.is_null() {
+            #[cfg(debug_assertions)]
             println!("[control_socket:connect_wrapper] Unable to resolve address");
             return false;
         }
@@ -153,6 +156,7 @@ pub extern "thiscall" fn connect_wrapper(this: *mut c_void, cp: PCSTR, u_short: 
 
             let mut ip_str_buf = [0u8; INET6_ADDRSTRLEN as usize];
             let ip_str_pcstr = inet_ntop(family, &ipv6.sin6_addr as *const _ as _, &mut ip_str_buf);
+            #[cfg(debug_assertions)]
             println!(
                 "[control_socket:connect_wrapper] Resolved address: {}",
                 ip_str_pcstr.to_string().unwrap()
@@ -166,6 +170,7 @@ pub extern "thiscall" fn connect_wrapper(this: *mut c_void, cp: PCSTR, u_short: 
         }
 
         // Prevent connecting to IPv4 (should be IPv6 mapped), file socket etc.
+        #[cfg(debug_assertions)]
         println!(
             "[control_socket:connect_wrapper] Prevented connection to unknown address (family {})",
             family
@@ -221,11 +226,13 @@ pub extern "thiscall" fn recv_wrapper(this: *mut c_void, buf: *mut c_char, len: 
 
         if result > 0 {
             let printable = String::from_utf8_lossy(&slice[..result as usize]);
+            #[cfg(debug_assertions)]
             println!(
                 "[hooked_recv_proxy] SOCKET=0x{:X}, len={}, text=\"{}\"",
                 socket.0 as usize, result, printable
             );
         } else {
+            #[cfg(debug_assertions)]
             println!(
                 "[hooked_recv_proxy] SOCKET=0x{:X}, len={}, result={}, error={}",
                 socket.0 as usize,
@@ -256,6 +263,7 @@ pub extern "thiscall" fn send_wrapper(this: *mut c_void, buf: *const c_char, len
                 .iter()
                 .map(|&b| b as char)
                 .collect::<String>();
+            #[cfg(debug_assertions)]
             println!("[-> out] {}", printable);
         }
 

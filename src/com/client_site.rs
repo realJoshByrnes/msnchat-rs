@@ -51,6 +51,7 @@ unsafe extern "system" fn query_interface(
 
         match riid {
             &IOleClientSite::IID | &windows::core::IUnknown::IID => {
+                #[cfg(debug_assertions)]
                 println!(
                     "client_site::QueryInterface: {:?} (IOleClientSite / IUknown)",
                     riid
@@ -60,6 +61,7 @@ unsafe extern "system" fn query_interface(
                 S_OK
             }
             &IOleControlSite::IID => {
+                #[cfg(debug_assertions)]
                 println!("client_site::QueryInterface: {:?} (IOleControlSite)", riid);
                 let control_site = (*shared).control_site;
                 *ppv = control_site as *mut c_void;
@@ -67,6 +69,7 @@ unsafe extern "system" fn query_interface(
                 S_OK
             }
             &IDispatch::IID => {
+                #[cfg(debug_assertions)]
                 println!("client_site::QueryInterface: {:?} (IDispatch)", riid);
                 let dispatch = (*shared).dispatch;
                 *ppv = dispatch as *mut c_void;
@@ -74,6 +77,7 @@ unsafe extern "system" fn query_interface(
                 S_OK
             }
             &IOleInPlaceSiteEx::IID => {
+                #[cfg(debug_assertions)]
                 println!(
                     "client_site::QueryInterface: {:?} (IOleInPlaceSiteEx)",
                     riid
@@ -84,6 +88,7 @@ unsafe extern "system" fn query_interface(
                 S_OK
             }
             &IOleInPlaceSite::IID => {
+                #[cfg(debug_assertions)]
                 println!("client_site::QueryInterface: {:?} (IOleInPlaceSite)", riid);
                 let inplace_site = (*shared).inplace_site;
                 *ppv = inplace_site as *mut c_void;
@@ -92,6 +97,7 @@ unsafe extern "system" fn query_interface(
             }
             // // TODO: This is not working yet.
             &IServiceProvider::IID => {
+                #[cfg(debug_assertions)]
                 println!("client_site::QueryInterface: {:?} (IServiceProvider)", riid);
                 let service_provider = (*shared).service_provider;
                 *ppv = service_provider as *mut c_void;
@@ -99,6 +105,7 @@ unsafe extern "system" fn query_interface(
                 S_OK
             }
             _ => {
+                #[cfg(debug_assertions)]
                 println!("client_site::QueryInterface: {:?}", riid);
                 *ppv = std::ptr::null_mut();
                 E_NOINTERFACE
@@ -128,6 +135,7 @@ pub unsafe extern "system" fn release(this: *mut c_void) -> u32 {
 }
 
 unsafe extern "system" fn save_object(_this: *mut c_void) -> HRESULT {
+    #[cfg(debug_assertions)]
     println!("IOleClientSite::SaveObject called");
     S_OK
 }
@@ -137,6 +145,7 @@ unsafe extern "system" fn get_moniker(
     _dw_which_moniker: u32,
     _ppmk: *mut *mut c_void,
 ) -> HRESULT {
+    #[cfg(debug_assertions)]
     println!("IOleClientSite::GetMoniker called");
     E_NOTIMPL
 }
@@ -145,6 +154,7 @@ unsafe extern "system" fn get_container(
     pp_container: *mut *mut c_void,
 ) -> HRESULT {
     unsafe {
+        #[cfg(debug_assertions)]
         println!("IOleClientSite::GetContainer called");
         if !pp_container.is_null() {
             *pp_container = std::ptr::null_mut();
@@ -153,15 +163,18 @@ unsafe extern "system" fn get_container(
     }
 }
 unsafe extern "system" fn show_object(_this: *mut c_void) -> HRESULT {
+    #[cfg(debug_assertions)]
     println!("IOleClientSite::ShowObject called");
     S_OK
 }
 unsafe extern "system" fn on_show_window(_this: *mut c_void, _f_show: BOOL) -> HRESULT {
+    #[cfg(debug_assertions)]
     println!("IOleClientSite::OnShowWindow called");
     // No need to do anything here.
     S_OK
 }
 unsafe extern "system" fn request_new_object_layout(_this: *mut c_void) -> HRESULT {
+    #[cfg(debug_assertions)]
     println!("IOleClientSite::RequestNewObjectLayout called");
     E_NOTIMPL
 }

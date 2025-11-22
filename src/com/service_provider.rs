@@ -34,6 +34,7 @@ pub unsafe extern "system" fn query_interface(
     ppv: *mut *mut c_void,
 ) -> HRESULT {
     unsafe {
+        #[cfg(debug_assertions)]
         println!(
             "*** IServiceProvider::QueryInterface called for {:?}",
             *riid
@@ -70,9 +71,11 @@ unsafe extern "system" fn query_service(
     riid: *const GUID,
     ppv_object: *mut *mut c_void,
 ) -> HRESULT {
+    #[cfg(debug_assertions)]
     println!("*** IServiceProvider::QueryService called");
     unsafe {
         if !guid_service.is_null() {
+            #[cfg(debug_assertions)]
             println!(
                 "  guidService: {{{:08X}-{:04X}-{:04X}-{:02X}{:02X}-{:02X}{:02X}{:02X}{:02X}{:02X}{:02X}}}",
                 (*guid_service).data1,
@@ -88,10 +91,12 @@ unsafe extern "system" fn query_service(
                 (*guid_service).data4[7]
             );
         } else {
+            #[cfg(debug_assertions)]
             println!("  guidService: NULL");
         }
 
         if !riid.is_null() {
+            #[cfg(debug_assertions)]
             println!(
                 "  riid:        {{{:08X}-{:04X}-{:04X}-{:02X}{:02X}-{:02X}{:02X}{:02X}{:02X}{:02X}{:02X}}}",
                 (*riid).data1,
@@ -107,6 +112,7 @@ unsafe extern "system" fn query_service(
                 (*riid).data4[7]
             );
         } else {
+            #[cfg(debug_assertions)]
             println!("  riid: NULL");
         }
 

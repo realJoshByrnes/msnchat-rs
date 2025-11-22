@@ -43,6 +43,7 @@ unsafe extern "system" fn query_interface(
     ppv: *mut *mut c_void,
 ) -> HRESULT {
     unsafe {
+        #[cfg(debug_assertions)]
         println!("IDispatch::QueryInterface called for {:?}", riid);
         if ppv.is_null() {
             return E_POINTER;
@@ -96,6 +97,7 @@ pub unsafe extern "system" fn release(this: *mut c_void) -> u32 {
 }
 
 unsafe extern "system" fn get_type_info_count(_this: *mut c_void, pctinfo: *mut u32) -> HRESULT {
+    #[cfg(debug_assertions)]
     println!("IDispatch::GetTypeInfoCount called");
     if !pctinfo.is_null() {
         unsafe {
@@ -110,6 +112,7 @@ unsafe extern "system" fn get_type_info(
     _lcid: u32,
     _pp_tinfo: *mut *mut c_void,
 ) -> HRESULT {
+    #[cfg(debug_assertions)]
     println!("IDispatch::GetTypeInfo called for iTInfo: {}", _i_tinfo);
     E_NOTIMPL
 }
@@ -121,6 +124,7 @@ unsafe extern "system" fn get_ids_of_names(
     _lcid: u32,
     _rg_disp_id: *mut i32,
 ) -> HRESULT {
+    #[cfg(debug_assertions)]
     println!("IDispatch::GetIDsOfNames called for names: {:?}", unsafe {
         std::slice::from_raw_parts(_rgsz_names, _c_names as usize)
     });
@@ -163,6 +167,7 @@ unsafe extern "system" fn invoke(
             }
         }
         _ => {
+            #[cfg(debug_assertions)]
             println!(
                 // Show all parameters for debugging
                 "IDispatch::Invoke called with dispIdMember: {}, riid: {:?}, lcid: {}, wFlags: {:?}",

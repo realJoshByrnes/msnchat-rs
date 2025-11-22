@@ -37,6 +37,7 @@ pub unsafe extern "system" fn query_interface(
     ppv: *mut *mut c_void,
 ) -> HRESULT {
     unsafe {
+        #[cfg(debug_assertions)]
         println!("MyOleInPlaceSiteEx::QueryInterface called for {:?}", *riid);
         *ppv = ptr::null_mut();
         E_NOINTERFACE
@@ -66,6 +67,7 @@ pub unsafe extern "system" fn release(this: *mut c_void) -> u32 {
 // --- IOleInPlaceSite methods (stubs) ---
 unsafe extern "system" fn get_window(this: *mut c_void, phwnd: *mut HWND) -> HRESULT {
     unsafe {
+        #[cfg(debug_assertions)]
         println!("IOleInPlaceSiteEx::GetWindow called");
 
         if phwnd.is_null() {
@@ -74,6 +76,7 @@ unsafe extern "system" fn get_window(this: *mut c_void, phwnd: *mut HWND) -> HRE
         let site = &*(this as *mut MyOleInPlaceSiteEx);
         let hwnd = (*site.shared).hwnd;
         *phwnd = hwnd;
+        #[cfg(debug_assertions)]
         println!("- Returning hwnd: {:?}", hwnd);
         S_OK
     }
@@ -82,18 +85,22 @@ unsafe extern "system" fn context_sensitive_help(
     _this: *mut c_void,
     _f_enter_mode: BOOL,
 ) -> HRESULT {
+    #[cfg(debug_assertions)]
     println!("IOleInPlaceSiteEx::ContextSensitiveHelp called");
     E_NOTIMPL
 }
 unsafe extern "system" fn can_in_place_activate(_this: *mut c_void) -> HRESULT {
+    #[cfg(debug_assertions)]
     println!("IOleInPlaceSiteEx::CanInPlaceActivate called");
     S_OK
 }
 unsafe extern "system" fn on_in_place_activate(_this: *mut c_void) -> HRESULT {
+    #[cfg(debug_assertions)]
     println!("IOleInPlaceSiteEx::OnInPlaceActivate called");
     S_OK
 }
 unsafe extern "system" fn on_ui_activate(_this: *mut c_void) -> HRESULT {
+    #[cfg(debug_assertions)]
     println!("IOleInPlaceSiteEx::OnUIActivate called");
     S_OK
 }
@@ -106,6 +113,7 @@ unsafe extern "system" fn get_window_context(
     lp_frame_info: *mut OLEINPLACEFRAMEINFO,
 ) -> HRESULT {
     unsafe {
+        #[cfg(debug_assertions)]
         println!("IOleInPlaceSiteEx::GetWindowContext called");
         if !pp_frame.is_null() {
             *pp_frame = ptr::null_mut();
@@ -133,26 +141,31 @@ unsafe extern "system" fn get_window_context(
 }
 
 unsafe extern "system" fn scroll(_this: *mut c_void, _scroll_extent: SIZE) -> HRESULT {
+    #[cfg(debug_assertions)]
     println!("IOleInPlaceSiteEx::Scroll called");
     E_NOTIMPL
 }
 
 unsafe extern "system" fn on_ui_deactivate(_this: *mut c_void, _f_undoable: BOOL) -> HRESULT {
+    #[cfg(debug_assertions)]
     println!("IOleInPlaceSiteEx::OnUIDeactivate called");
     S_OK
 }
 
 unsafe extern "system" fn on_in_place_deactivate(_this: *mut c_void) -> HRESULT {
+    #[cfg(debug_assertions)]
     println!("IOleInPlaceSiteEx::OnInPlaceDeactivate called");
     S_OK
 }
 
 unsafe extern "system" fn discard_undo_state(_this: *mut c_void) -> HRESULT {
+    #[cfg(debug_assertions)]
     println!("IOleInPlaceSiteEx::DiscardUndoState called");
     S_OK
 }
 
 unsafe extern "system" fn deactivate_and_notify(_this: *mut c_void) -> HRESULT {
+    #[cfg(debug_assertions)]
     println!("IOleInPlaceSiteEx::DeactivateAndUndo called");
     S_OK
 }
@@ -161,6 +174,7 @@ unsafe extern "system" fn on_pos_rect_change(
     _this: *mut c_void,
     _lprc_pos_rect: *const RECT,
 ) -> HRESULT {
+    #[cfg(debug_assertions)]
     println!("IOleInPlaceSiteEx::OnPosRectChange called");
     S_OK
 }
@@ -170,6 +184,7 @@ unsafe extern "system" fn on_in_place_activate_ex(
     _f_no_redraw: *mut BOOL,
     _lprc_pos_rect: u32,
 ) -> HRESULT {
+    #[cfg(debug_assertions)]
     println!("IOleInPlaceSiteEx::OnInPlaceActivateEx called");
     E_NOTIMPL
 }
@@ -178,11 +193,13 @@ unsafe extern "system" fn on_in_place_deactivate_ex(
     _this: *mut c_void,
     _f_no_redraw: BOOL,
 ) -> HRESULT {
+    #[cfg(debug_assertions)]
     println!("IOleInPlaceSiteEx::OnInPlaceDeactivateEx called");
     E_NOTIMPL
 }
 
 unsafe extern "system" fn request_ui_activate(_this: *mut c_void) -> HRESULT {
+    #[cfg(debug_assertions)]
     println!("IOleInPlaceSiteEx::RequestUIActivate called");
     E_NOTIMPL
 }

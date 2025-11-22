@@ -33,6 +33,7 @@ pub unsafe extern "system" fn query_interface(
     riid: *const GUID,
     _ppv: *mut *mut c_void,
 ) -> HRESULT {
+    #[cfg(debug_assertions)]
     println!("control_site::QueryInterface called for {:?}", unsafe {
         *riid
     });
@@ -61,11 +62,13 @@ pub unsafe extern "system" fn release(this: *mut c_void) -> u32 {
 
 // --- IOleControlSite methods (stubs) ---
 unsafe extern "system" fn on_control_info_changed(_this: *mut c_void) -> HRESULT {
+    #[cfg(debug_assertions)]
     println!("IOleControlSite::OnControlInfoChanged called");
     S_OK
 }
 
 unsafe extern "system" fn lock_in_place_active(_this: *mut c_void, _f_lock: BOOL) -> HRESULT {
+    #[cfg(debug_assertions)]
     println!("IOleControlSite::LockInPlaceActive called");
     S_OK
 }
@@ -74,6 +77,7 @@ unsafe extern "system" fn get_extended_control(
     _this: *mut c_void,
     _pp_disp: *mut *mut c_void,
 ) -> HRESULT {
+    #[cfg(debug_assertions)]
     println!("IOleControlSite::GetExtendedControl called");
     E_NOTIMPL
 }
@@ -84,6 +88,7 @@ unsafe extern "system" fn transform_coords(
     _p_pixel: *mut POINTF,
     _dw_flags: u32,
 ) -> HRESULT {
+    #[cfg(debug_assertions)]
     println!("IOleControlSite::TransformCoords called");
     S_OK
 }
@@ -93,16 +98,19 @@ unsafe extern "system" fn translate_accelerator(
     _p_msg: *const WindowsAndMessaging::MSG,
     _grf_modifiers: KEYMODIFIERS,
 ) -> HRESULT {
+    #[cfg(debug_assertions)]
     println!("IOleControlSite::TranslateAccelerator called");
     S_OK
 }
 
 unsafe extern "system" fn on_focus(_this: *mut c_void, _f_focus: BOOL) -> HRESULT {
+    #[cfg(debug_assertions)]
     println!("IOleControlSite::OnFocus called");
     S_OK
 }
 
 unsafe extern "system" fn show_property_frame(_this: *mut c_void) -> HRESULT {
+    #[cfg(debug_assertions)]
     println!("IOleControlSite::ShowPropertyFrame called");
     S_OK
 }

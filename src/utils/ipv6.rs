@@ -44,6 +44,7 @@ fn detect_ipv6_support() -> bool {
                 true
             }
             Err(e) => {
+                #[cfg(debug_assertions)]
                 eprintln!("IPv6 socket creation failed: {:?}", e);
                 false
             }
