@@ -1,0 +1,5 @@
+# Cargo Build Output
+/target/
+
+# IDA Files
+/assets/vendor/microsoft/MsnChat45.ocx.*

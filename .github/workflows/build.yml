@@ -1,0 +1,28 @@
+name: Build
+
+on:
+  push:
+    branches: [ "main", "v2" ]
+  pull_request:
+    branches: [ "main", "v2" ]
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        targets: i686-pc-windows-msvc
+
+    - name: Build
+      run: cargo build --release --target i686-pc-windows-msvc
+
+    - name: Upload Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: msnchat-rs-i686-windows
+        path: target/i686-pc-windows-msvc/release/msnchat-rs.exe
