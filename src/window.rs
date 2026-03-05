@@ -17,7 +17,8 @@ use crate::host::OcxHost;
 pub struct OcxWindow {
     hwnd: HWND,
     host: Option<OcxHost>,
-    children: Vec<OcxWindow>,
+    #[allow(clippy::vec_box)]
+    children: Vec<Box<OcxWindow>>,
     pub is_main_window: bool,
     parent_hwnd: Option<HWND>,
 }
@@ -205,9 +206,9 @@ impl OcxWindow {
                                     0x4D2F,
                                     [0xB3, 0xC2, 0x9A, 0x5B, 0xE4, 0x25, 0x25, 0xF8],
                                 );
-                                let mut settings_win = settings_win;
-                                let _ = settings_win.attach_ocx(module, &clsid, |_| {});
-                                this.children.push(settings_win);
+                                let mut settings_win_boxed = Box::new(settings_win);
+                                let _ = settings_win_boxed.attach_ocx(module, &clsid, |_| {});
+                                this.children.push(settings_win_boxed);
                             }
                         }
                         return LRESULT(0);
