@@ -8,9 +8,9 @@ impl ModuleInfo {
         Self { base_address }
     }
 
-    pub fn resolve(&self, rva: usize) -> *mut std::ffi::c_void {
+    pub fn resolve(&self, ida_addr: usize) -> *mut std::ffi::c_void {
         // MSNChat45.ocx default image base is 0x37200000
-        let offset = rva - 0x37200000;
+        let offset = ida_addr - 0x37200000;
         (self.base_address + offset) as *mut std::ffi::c_void
     }
 }

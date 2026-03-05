@@ -19,7 +19,7 @@ type DllGetClassObjectFunc = unsafe extern "system" fn(
 ) -> windows::core::HRESULT;
 
 pub struct OcxHost {
-    pub module: crate::patch::pe::ManualModule,
+    pub module: std::sync::Arc<crate::patch::pe::ManualModule>,
     ole_object: IOleObject,
     inplace_object: Option<IOleInPlaceObject>,
     wrappers: Box<HostWrappers>,
@@ -40,13 +40,11 @@ impl Drop for OcxHost {
 }
 
 impl OcxHost {
-    pub fn new(dll_bytes: &[u8], clsid: &GUID) -> Result<Self> {
+    pub fn new(
+        module: std::sync::Arc<crate::patch::pe::ManualModule>,
+        clsid: &GUID,
+    ) -> Result<Self> {
         unsafe {
-            let module = crate::patch::pe::ManualModule::load(dll_bytes).map_err(|e| {
-                log::error!("Manual load failed: {}", e);
-                windows::core::Error::from_hresult(windows::core::HRESULT(E_FAIL.0))
-            })?;
-
             let get_class_object_ptr = module.get_export("DllGetClassObject").map_err(|e| {
                 log::error!("DllGetClassObject not found: {}", e);
                 windows::core::Error::from_hresult(windows::core::HRESULT(E_FAIL.0))
@@ -145,6 +143,28 @@ impl OcxHost {
         Ok(())
     }
 
+    pub fn get_size(&self) -> Result<(i32, i32)> {
+        unsafe {
+            use windows::Win32::Graphics::Gdi::{
+                GET_DEVICE_CAPS_INDEX, GetDC, GetDeviceCaps, ReleaseDC,
+            };
+            use windows::Win32::System::Com::DVASPECT_CONTENT;
+
+            let sz = self.ole_object.GetExtent(DVASPECT_CONTENT)?;
+
+            let hdc = GetDC(None);
+            let dpi_x = GetDeviceCaps(Some(hdc), GET_DEVICE_CAPS_INDEX(88)); // LOGPIXELSX
+            let dpi_y = GetDeviceCaps(Some(hdc), GET_DEVICE_CAPS_INDEX(90)); // LOGPIXELSY
+            ReleaseDC(None, hdc);
+
+            // HIMETRIC is 0.01 mm per unit. 2540 HIMETRIC units = 1 inch.
+            let width = (sz.cx * dpi_x + 1270) / 2540;
+            let height = (sz.cy * dpi_y + 1270) / 2540;
+
+            Ok((width, height))
+        }
+    }
+
     pub fn dispatch(&self) -> Result<windows::Win32::System::Com::IDispatch> {
         self.ole_object.cast()
     }
@@ -207,6 +227,37 @@ impl OcxHost {
             let _ = windows::Win32::System::Variant::VariantClear(&mut variant);
 
             hr_invoke
+        }
+    }
+
+    pub fn show_settings(&self) -> Result<()> {
+        unsafe {
+            use windows::Win32::System::Ole::OleCreatePropertyFrame;
+
+            let clsid = GUID::from_values(
+                0xFA980E7E,
+                0x9E44,
+                0x4D2F,
+                [0xB3, 0xC2, 0x9A, 0x5B, 0xE4, 0x25, 0x25, 0xF8],
+            );
+
+            let my_unk: IUnknown = self.ole_object.cast()?;
+            let mut unks = [Some(my_unk)];
+            let mut clsids = [clsid];
+
+            OleCreatePropertyFrame(
+                HWND(std::ptr::null_mut()),
+                0,
+                0,
+                windows::core::w!("Settings"),
+                unks.len() as u32,
+                unks.as_mut_ptr(),
+                clsids.len() as u32,
+                clsids.as_mut_ptr(),
+                0,    // LCID
+                None, // dwreserved (Wait, wait, let's look at signatures) Or maybe pass `None`? Wait, I'll pass 0 for lcid, None for dwreserved, None for pvreserved. Wait, let me just pass None for both.
+                None,
+            )
         }
     }
 }

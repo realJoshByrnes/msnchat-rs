@@ -12,6 +12,9 @@ pub struct ManualModule {
     pub base_address: *mut u8,
 }
 
+unsafe impl Send for ManualModule {}
+unsafe impl Sync for ManualModule {}
+
 impl ManualModule {
     /// # Safety
     /// This function loads and executes native code from memory, which inherently bypasses
@@ -186,6 +189,9 @@ impl ManualModule {
             }
             if let Err(e) = crate::patch::atl_thunk::apply(&module_info) {
                 log::error!("Failed to apply atl thunk patch: {}", e);
+            }
+            if let Err(e) = crate::chat45::apply_patches(&module_info) {
+                log::error!("Failed to apply chat45 patches: {}", e);
             }
 
             // Apply queued hooks

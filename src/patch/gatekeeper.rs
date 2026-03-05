@@ -1,9 +1,9 @@
 use crate::patch::module_info::ModuleInfo;
 use std::ffi::c_void;
 use uuid::Uuid;
-use windows::core::{BOOL, GUID};
+use windows::core::GUID;
 
-type Sub3721da6c = unsafe extern "cdecl" fn(a1: *mut GUID) -> BOOL;
+type Sub3721da6c = unsafe extern "cdecl" fn(a1: *mut GUID) -> u8;
 static mut TRAMPOLINE: Option<Sub3721da6c> = None;
 
 /// # Safety
@@ -22,21 +22,21 @@ pub unsafe fn apply(info: &ModuleInfo) -> Result<(), String> {
     unsafe {
         TRAMPOLINE = Some(std::mem::transmute::<
             *mut c_void,
-            unsafe extern "cdecl" fn(*mut GUID) -> BOOL,
+            unsafe extern "cdecl" fn(*mut GUID) -> u8,
         >(hook_addr))
     };
     Ok(())
 }
 
 #[unsafe(no_mangle)]
-unsafe extern "cdecl" fn gatekeeper_hook(a1: *mut GUID) -> BOOL {
+unsafe extern "cdecl" fn gatekeeper_hook(a1: *mut GUID) -> u8 {
     let mut result = if let Some(trampoline) = unsafe { TRAMPOLINE } {
         unsafe { trampoline(a1) }
     } else {
-        BOOL(0)
+        0
     };
 
-    if !a1.is_null() && result == BOOL(0) {
+    if !a1.is_null() && result == 0 {
         log::info!(
             "Gatekeeper original function failed to read registry. Providing newly generated GUID."
         );
@@ -45,13 +45,13 @@ unsafe extern "cdecl" fn gatekeeper_hook(a1: *mut GUID) -> BOOL {
         match generate_id() {
             Ok(new_guid) => {
                 unsafe { *a1 = new_guid };
-                result = BOOL(1);
+                result = 1;
             }
             Err(e) => {
                 log::error!("Failed to generate fallback Gatekeeper GUID: {:?}", e);
             }
         }
-    } else if !a1.is_null() && result != BOOL(0) {
+    } else if !a1.is_null() && result != 0 {
         let guid = unsafe { *a1 };
         log::info!("Gatekeeper GUID loaded from registry correctly: {:?}", guid);
     }

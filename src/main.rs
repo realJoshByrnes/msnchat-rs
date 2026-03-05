@@ -1,6 +1,7 @@
 use windows::Win32::System::Ole::OleInitialize;
 use windows::core::{GUID, Result};
 
+pub mod chat45;
 pub mod host;
 pub mod patch;
 pub mod window;
@@ -14,17 +15,14 @@ fn main() -> Result<()> {
         env_logger::init();
     }
 
-    if let Err(e) = unsafe { patch::loader_hook::init_dll_hooks() } {
-        log::error!("Failed to init hooks: {}", e);
-    }
-
     // Initialize OLE / COM
     unsafe {
         OleInitialize(None)?;
     }
 
     // Create the main window
-    let mut main_window = OcxWindow::new()?;
+    let mut main_window = OcxWindow::new(None)?;
+    main_window.is_main_window = true;
 
     // Attach the MSN Chat OCX
     let clsid = GUID::from_values(
@@ -42,8 +40,11 @@ fn main() -> Result<()> {
 
     let dll_bytes = &OCX_BYTES.0;
 
+    let manual_module =
+        std::sync::Arc::new(unsafe { patch::pe::ManualModule::load(dll_bytes) }.unwrap());
+
     log::info!("Attaching OCX to main window...");
-    match main_window.attach_ocx(dll_bytes, &clsid, |host| {
+    match main_window.attach_ocx(manual_module, &clsid, |host| {
         log::info!("Setting BaseURL");
         let _ = host.put_property("BaseURL", "http://chat.msn.com/");
         let random_digits: u16 = rand::random::<u16>() % 10000;
