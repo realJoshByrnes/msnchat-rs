@@ -28,7 +28,8 @@ fn main() {
 
         if found {
             let rc_content = format!(
-                "1 TYPELIB \"{}\"\n",
+                "LANGUAGE 0, 0\n\
+                1 TYPELIB \"{}\"\n",
                 tlb_path.display().to_string().replace("\\", "/")
             );
             let rc_path = PathBuf::from(&out_dir).join("msnchat.rc");
