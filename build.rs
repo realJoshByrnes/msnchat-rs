@@ -27,14 +27,13 @@ fn main() {
         }
 
         if found {
-            let rc_content = format!(
+            let mut res = winres::WindowsResource::new();
+            res.append_rc_content(&format!(
                 "LANGUAGE 0, 0\n\
                 1 TYPELIB \"{}\"\n",
                 tlb_path.display().to_string().replace("\\", "/")
-            );
-            let rc_path = PathBuf::from(&out_dir).join("msnchat.rc");
-            fs::write(&rc_path, rc_content).expect("Failed to write RC");
-            let _ = embed_resource::compile(&rc_path, &[""]);
+            ));
+            res.compile().expect("Failed to compile resources");
         } else {
             println!("cargo:warning=Failed to find TYPELIB in MsnChat45.ocx");
         }
