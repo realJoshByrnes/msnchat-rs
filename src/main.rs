@@ -1,3 +1,5 @@
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
 use windows::Win32::System::Ole::OleInitialize;
 use windows::core::{GUID, Result};
 
