@@ -48,10 +48,7 @@ fn main() {
                 tlb_path.display().to_string().replace("\\", "/")
             ));
             if let Err(err) = res.compile() {
-                println!(
-                    "cargo:warning=Failed to compile Windows resources: {}",
-                    err
-                );
+                println!("cargo:warning=Failed to compile Windows resources: {}", err);
             } else if target.contains("windows-gnu") {
                 // GNU linkers may ignore archive members that do not satisfy undefined symbols.
                 // resource.o only carries .rsrc, so force-link the object file explicitly.
