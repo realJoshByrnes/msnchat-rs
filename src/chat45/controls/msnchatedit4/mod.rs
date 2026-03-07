@@ -3,12 +3,31 @@ use windows::Win32::Graphics::Gdi::{
     CreateSolidBrush, DeleteObject, GetSysColor, HBRUSH, SYS_COLOR_INDEX,
 };
 use windows::Win32::System::LibraryLoader::LoadLibraryA;
-use windows::Win32::UI::WindowsAndMessaging::{DestroyMenu, HMENU, LoadMenuA, SendMessageA};
+use windows::Win32::UI::WindowsAndMessaging::{
+    DestroyMenu, ES_AUTOHSCROLL, ES_MULTILINE, ES_WANTRETURN, HMENU, LoadMenuA, SendMessageA,
+    WS_CHILD, WS_VISIBLE,
+};
 use windows::core::{PCSTR, s};
 
 pub mod hooks;
 pub mod layout;
 
+#[cfg(not(target_pointer_width = "32"))]
+compile_error!("MSNChatEdit4 layout and hooks currently require a 32-bit target.");
+
+const EDIT4_WINDOW_STYLE: u32 = (WS_CHILD.0 | WS_VISIBLE.0)
+    | (ES_MULTILINE as u32)
+    | (ES_AUTOHSCROLL as u32)
+    | (ES_WANTRETURN as u32);
+const EDIT4_MENU_RESOURCE_ID: u16 = 0x025A;
+
+const EDIT4_MSG_APPLY_COLORS: u32 = 0x0468;
+
+#[inline]
+fn make_int_resource_a(id: u16) -> PCSTR {
+    // Win32 MAKEINTRESOURCEA-style conversion for integer resource IDs.
+    PCSTR(id as usize as *const u8)
+}
 pub struct MSNChatEdit4 {
     pub is_richedit20: bool, // offset 39
     pub hwnd: HWND,          // offset 40 (inside inner object/thunk)
@@ -27,23 +46,28 @@ unsafe impl Sync for MSNChatEdit4 {}
 pub struct MSNChatEdit4Layout {
     pub vtable: usize,                   // 0 / 0x00
     pub hwnd_parent: HWND,               // 4 / 0x04
-    pub unk_08: usize,                   // 8 / 0x08
-    pub unk_0c: usize,                   // 12 / 0x0C
-    pub unk_10: usize,                   // 16 / 0x10
-    pub unk_14: usize,                   // 20 / 0x14
-    pub unk_18: usize,                   // 24 / 0x18
-    pub unk_1c: usize,                   // 28 / 0x1C
+    pub reserved_base_08: usize,         // 8 / 0x08 (base/inherited state)
+    pub reserved_base_0c: usize,         // 12 / 0x0C (base/inherited state)
+    pub reserved_base_10: usize,         // 16 / 0x10 (base/inherited state)
+    pub reserved_base_14: usize,         // 20 / 0x14 (base/inherited state)
+    pub reserved_base_18: usize,         // 24 / 0x18 (base/inherited state)
+    pub super_wnd_proc: usize,           // 28 / 0x1C (initialized to DefWindowProcA)
     pub cr_text_color: u32,              // 32 / 0x20
-    pub unk_24: usize,                   // 36 / 0x24
-    pub unk_28: usize,                   // 40 / 0x28
-    pub unk_2c: usize,                   // 44 / 0x2C
-    pub unk_30: usize,                   // 48 / 0x30
-    pub unk_34: usize,                   // 52 / 0x34
-    pub margin: i32, // 56 / 0x38 (0x3C in C++ = 60 face name, so this is roughly before it)
+    pub cr_bg_color: u32,                // 36 / 0x24 (background color)
+    pub atl_flags: usize,                // 40 / 0x28
+    pub rgb_brush_obj: usize,            // 44 / 0x2C (DeleteObject on WM_DESTROY)
+    pub layout_mode: usize,              // 48 / 0x30 (setter constrains 0..2 and reflows)
+    pub aux_state_34: usize, // 52 / 0x34 (used by mixed methods; exact semantics unclear)
+    pub margin: i32,         // 56 / 0x38 (0x3C in C++ = 60 face name, so this is roughly before it)
     pub facename: [u16; 32], // 60 / 0x3C
-    pub unk_7c: [u8; 32], // 124 / 0x7C
-    pub unk_9c: usize, // 156 / 0x9C  (is_richedit20 flag check)
-    pub hwnd_self: HWND, // 160 / 0xA0
+    pub shortcut_keys_ascii: [u8; 16], // 124 / 0x7C (NUL-terminated shortcut key set)
+    pub pitch_and_family: u8, // 140 / 0x8C
+    pub _pad_8d: [u8; 3],    // 141 / 0x8D
+    pub charset: i32,        // 144 / 0x90
+    pub font_size_pt: i32,   // 148 / 0x94
+    pub font_effects: u32,   // 152 / 0x98
+    pub is_richedit20_flag: usize, // 156 / 0x9C
+    pub hwnd_self: HWND,     // 160 / 0xA0
     pub padding: [usize; 9], // 164 - 196
     pub event_sink: *const *const usize, // 200 / 0xC8
 }
@@ -107,7 +131,7 @@ impl MSNChatEdit4 {
                 id
             );
 
-            let style = windows::Win32::UI::WindowsAndMessaging::WINDOW_STYLE(0x50001084);
+            let style = windows::Win32::UI::WindowsAndMessaging::WINDOW_STYLE(EDIT4_WINDOW_STYLE);
 
             let window = if self.is_richedit20 {
                 let mut class_w: Vec<u16> = Vec::new();
@@ -164,24 +188,69 @@ impl MSNChatEdit4 {
             // Subclass hook would typically go here (sub_372212D6)
 
             // EM_LIMITTEXT
-            SendMessageA(self.hwnd, 0x00C5, WPARAM(0xFF), LPARAM(0));
+            SendMessageA(
+                self.hwnd,
+                windows::Win32::UI::Controls::EM_LIMITTEXT,
+                WPARAM(0xFF),
+                LPARAM(0),
+            );
             // EM_GETEVENTMASK
-            let mask = SendMessageA(self.hwnd, 0x043B, WPARAM(0), LPARAM(0));
+            let mask = SendMessageA(
+                self.hwnd,
+                windows::Win32::UI::Controls::RichEdit::EM_GETEVENTMASK,
+                WPARAM(0),
+                LPARAM(0),
+            );
             // EM_SETEVENTMASK (add ENM_CHANGE | ENM_SELCHANGE)
-            SendMessageA(self.hwnd, 0x0445, WPARAM(0), LPARAM(mask.0 | 0x20001));
+            SendMessageA(
+                self.hwnd,
+                windows::Win32::UI::Controls::RichEdit::EM_SETEVENTMASK,
+                WPARAM(0),
+                LPARAM(
+                    mask.0
+                        | (windows::Win32::UI::Controls::RichEdit::ENM_CHANGE
+                            | windows::Win32::UI::Controls::RichEdit::ENM_SELCHANGE)
+                            as isize,
+                ),
+            );
 
             if self.is_richedit20 {
-                SendMessageA(self.hwnd, 0x045B, WPARAM(0), LPARAM(0));
-                let v9 = SendMessageA(self.hwnd, 0x0479, WPARAM(0), LPARAM(0));
-                SendMessageA(self.hwnd, 0x0478, WPARAM(0), LPARAM(v9.0 & !3));
-                SendMessageA(self.hwnd, 0x04CC, WPARAM(0x10000), LPARAM(0x10000)); // EM_SETTEXTMODE?
+                SendMessageA(
+                    self.hwnd,
+                    windows::Win32::UI::Controls::RichEdit::EM_SETEDITSTYLE,
+                    WPARAM(0),
+                    LPARAM(0),
+                );
+                let v9 = SendMessageA(
+                    self.hwnd,
+                    windows::Win32::UI::Controls::RichEdit::EM_GETLANGOPTIONS,
+                    WPARAM(0),
+                    LPARAM(0),
+                );
+                SendMessageA(
+                    self.hwnd,
+                    windows::Win32::UI::Controls::RichEdit::EM_SETLANGOPTIONS,
+                    WPARAM(0),
+                    LPARAM(v9.0 & !3),
+                );
+                SendMessageA(
+                    self.hwnd,
+                    windows::Win32::UI::Controls::RichEdit::EM_SETTEXTMODE,
+                    WPARAM(windows::Win32::UI::Controls::RichEdit::TM_RICHTEXT.0 as usize),
+                    LPARAM(windows::Win32::UI::Controls::RichEdit::TM_RICHTEXT.0 as isize),
+                ); // EM_SETTEXTMODE?
             } else {
-                SendMessageA(self.hwnd, 0x046A, WPARAM(2), LPARAM(258)); // EM_AUTOURLDETECT
+                SendMessageA(
+                    self.hwnd,
+                    windows::Win32::UI::Controls::RichEdit::EM_AUTOURLDETECT,
+                    WPARAM(2),
+                    LPARAM(258),
+                );
             }
 
             self.context_menu = LoadMenuA(
                 Some(crate::patch::pe::get_ocx_hinstance()),
-                PCSTR::from_raw((0x25A & 0xFFFF) as *const u8),
+                make_int_resource_a(EDIT4_MENU_RESOURCE_ID),
             )
             .unwrap_or_default();
             true
@@ -206,7 +275,7 @@ impl MSNChatEdit4 {
 
             SendMessageA(
                 self.hwnd,
-                0x043A,    // EM_GETCHARFORMAT
+                windows::Win32::UI::Controls::RichEdit::EM_GETCHARFORMAT,
                 WPARAM(1), // SCF_DEFAULT
                 LPARAM(&mut cfa as *mut _ as isize),
             );
@@ -254,7 +323,7 @@ impl MSNChatEdit4 {
         unsafe {
             use windows::Win32::Graphics::Gdi::InflateRect;
             use windows::Win32::UI::WindowsAndMessaging::{
-                GetClientRect, SET_WINDOW_POS_FLAGS, SetWindowPos,
+                GetClientRect, SWP_NOACTIVATE, SWP_NOZORDER, SetWindowPos,
             };
 
             let layout = &*(this as *const MSNChatEdit4Layout);
@@ -285,7 +354,7 @@ impl MSNChatEdit4 {
                 final_rect.top,
                 final_rect.right - final_rect.left,
                 final_rect.bottom - final_rect.top,
-                SET_WINDOW_POS_FLAGS(0x14), // SWP_NOACTIVATE | SWP_NOZORDER
+                SWP_NOACTIVATE | SWP_NOZORDER,
             );
         }
     }
@@ -304,17 +373,17 @@ impl MSNChatEdit4 {
             };
 
             let layout = &mut *(this as *mut MSNChatEdit4Layout);
-            let y_height = layout.unk_18 as i32; // assuming offset 24 maps
-            let dw_effects = *((this as usize + 152) as *const u32);
-            let b_pitch_and_family = *((this as usize + 140) as *const u8);
+            let font_size_pt = layout.font_size_pt;
+            let dw_effects = layout.font_effects;
+            let b_pitch_and_family = layout.pitch_and_family;
             let cr_text_color = layout.cr_text_color;
             let facename_ptr = layout.facename.as_ptr();
-            let is_richedit20 = layout.unk_9c == 0;
+            let is_richedit20 = layout.is_richedit20_flag != 0;
 
             let mut cfa = CHARFORMATA {
                 cbSize: std::mem::size_of::<CHARFORMATA>() as u32,
                 dwMask: CFM_MASK(CFM_EFFECTS.0 | CFM_COLOR.0 | CFM_FACE.0 | CFM_SIZE.0),
-                yHeight: y_height * 20,
+                yHeight: font_size_pt * 20,
                 dwEffects: CFE_EFFECTS(dw_effects),
                 crTextColor: windows::Win32::Foundation::COLORREF(cr_text_color),
                 bPitchAndFamily: b_pitch_and_family,
@@ -329,21 +398,20 @@ impl MSNChatEdit4 {
                 cfa.szFaceName[i] = c as i8;
             }
 
-            let em_setcharformat = 0x0444;
             SendMessageA(
                 self.hwnd,
-                em_setcharformat,
+                windows::Win32::UI::Controls::RichEdit::EM_SETCHARFORMAT,
                 WPARAM(SCF_ALL as usize),
                 LPARAM(&mut cfa as *mut _ as isize),
             );
 
             if is_richedit20 {
-                let bg_color = *((this as usize + 36) as *const u32);
+                let bg_color = layout.cr_bg_color;
                 let mut lp = [cr_text_color, bg_color, dw_effects, 0];
                 // Sending a custom proprietary message 0x468
                 SendMessageA(
                     self.hwnd,
-                    0x0468,
+                    EDIT4_MSG_APPLY_COLORS,
                     WPARAM(0),
                     LPARAM(lp.as_mut_ptr() as isize),
                 );

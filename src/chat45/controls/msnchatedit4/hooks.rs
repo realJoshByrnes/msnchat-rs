@@ -9,6 +9,21 @@ use windows::core::PCSTR;
 use super::MSNChatEdit4;
 use super::layout::MemoryLayout;
 
+const OFFSET_PARENT_HWND: usize = 4;
+const OFFSET_IS_RICHEDIT20: usize = 156;
+const OFFSET_CHILD_HWND: usize = 160;
+const OFFSET_CONTEXT_MENU: usize = 216;
+
+const SUBCLASS_ID_EDIT4: usize = 1;
+const CREATE_WINDOW_OK: i32 = 0;
+const CREATE_WINDOW_FAIL: i32 = -1;
+
+const ADDR_EDIT4_VTABLE: usize = 0x37203FD0;
+const ADDR_EDIT4_CTOR: usize = 0x37226403;
+const ADDR_EDIT4_CREATE_WINDOW: usize = 0x37225F94;
+const ADDR_EDIT4_DTOR: usize = 0x37225931;
+const ADDR_EDIT4_WND_PROC: usize = 0x3721FEDA;
+
 static CONTROLS: OnceLock<Mutex<HashMap<usize, Arc<Mutex<MSNChatEdit4>>>>> = OnceLock::new();
 static VTABLE_PTR: OnceLock<usize> = OnceLock::new();
 static WINDOW_PROC: OnceLock<usize> = OnceLock::new();
@@ -21,8 +36,13 @@ unsafe extern "system" fn hook_window_proc(
     lparam: LPARAM,
 ) -> i32 {
     unsafe {
+        let Some(&orig_proc) = WINDOW_PROC.get() else {
+            log::error!("MSNChatEdit4 hook_window_proc called before WINDOW_PROC was initialized");
+            return 0;
+        };
+
         let wnd_proc: unsafe extern "system" fn(HWND, u32, WPARAM, LPARAM) -> i32 =
-            std::mem::transmute(*WINDOW_PROC.get().unwrap());
+            std::mem::transmute(orig_proc);
 
         // Filter out noisy messages like WM_NCHITTEST, WM_SETCURSOR, WM_MOUSEMOVE, etc.
         let is_noisy = matches!(
@@ -80,7 +100,7 @@ unsafe extern "system" fn rust_subclass_proc(
         if msg == WM_KEYDOWN && wparam.0 == VK_RETURN.0 as usize {
             let layout_ptr = ref_data as *mut MSNChatEdit4Layout;
             if !layout_ptr.is_null() {
-                let is_richedit20 = (*layout_ptr).unk_9c == 0;
+                let is_richedit20 = (*layout_ptr).is_richedit20_flag != 0;
                 if is_richedit20 {
                     let len = GetWindowTextLengthW(hwnd);
                     if len > 0 {
@@ -134,8 +154,18 @@ unsafe extern "thiscall" fn hook_ctor(this: *mut c_void) -> *mut c_void {
         // Create our Rust representation
         let ctrl = MSNChatEdit4::new(h_instance);
 
-        let mut map = get_controls().lock().unwrap();
-        map.insert(result_this as usize, Arc::new(Mutex::new(ctrl)));
+        // Mirror the original constructor's +156 flag semantics:
+        // non-zero means RichEdit20 path is active.
+        *((this as usize + OFFSET_IS_RICHEDIT20) as *mut u32) = u32::from(ctrl.is_richedit20);
+
+        match get_controls().lock() {
+            Ok(mut map) => {
+                map.insert(result_this as usize, Arc::new(Mutex::new(ctrl)));
+            }
+            Err(err) => {
+                log::error!("MSNChatEdit4 ctor map lock poisoned: {}", err);
+            }
+        }
 
         result_this
     }
@@ -159,16 +189,25 @@ unsafe extern "thiscall" fn hook_create_window(
         _a5
     );
 
-    let ctrl_arc = {
-        let map = get_controls().lock().unwrap();
-        map.get(&(this as usize)).cloned()
+    let ctrl_arc = match get_controls().lock() {
+        Ok(map) => map.get(&(this as usize)).cloned(),
+        Err(err) => {
+            log::error!("MSNChatEdit4 create_window map lock poisoned: {}", err);
+            return CREATE_WINDOW_FAIL;
+        }
     };
 
     if let Some(ctrl_arc) = ctrl_arc {
-        let mut ctrl = ctrl_arc.lock().unwrap();
+        let mut ctrl = match ctrl_arc.lock() {
+            Ok(ctrl) => ctrl,
+            Err(err) => {
+                log::error!("MSNChatEdit4 create_window control lock poisoned: {}", err);
+                return CREATE_WINDOW_FAIL;
+            }
+        };
 
         unsafe {
-            let parent_hwnd_ptr = (this as usize + 4) as *const HWND;
+            let parent_hwnd_ptr = (this as usize + OFFSET_PARENT_HWND) as *const HWND;
             let parent_hwnd = *parent_hwnd_ptr;
             let id_val = this as isize;
 
@@ -178,30 +217,30 @@ unsafe extern "thiscall" fn hook_create_window(
             if ctrl.create_window(parent_hwnd, id_val, h_instance) {
                 // Completely bypass CContainedWindow::SubclassWindow.
                 // We wire the HWND into our struct offset, then add our native SetWindowSubclass logic.
-                let hwnd_ptr = (this as usize + 160) as *mut HWND;
+                let hwnd_ptr = (this as usize + OFFSET_CHILD_HWND) as *mut HWND;
                 *hwnd_ptr = ctrl.hwnd;
                 let _ = windows::Win32::UI::Shell::SetWindowSubclass(
                     ctrl.hwnd,
                     Some(rust_subclass_proc),
-                    1,
+                    SUBCLASS_ID_EDIT4,
                     this as usize,
                 );
 
                 // Bind the extracted Context Menu HMENU to offset 216 so WM_CONTEXTMENU maps catch it
-                let menu_ptr =
-                    (this as usize + 216) as *mut windows::Win32::UI::WindowsAndMessaging::HMENU;
+                let menu_ptr = (this as usize + OFFSET_CONTEXT_MENU)
+                    as *mut windows::Win32::UI::WindowsAndMessaging::HMENU;
                 *menu_ptr = ctrl.context_menu;
 
                 // Call the original formatting routines to apply default colors and fonts
                 ctrl.format_layout(this);
                 ctrl.format_font(this);
 
-                return 0; // 0 == Success in original assembly
+                return CREATE_WINDOW_OK;
             }
         }
     }
 
-    -1 // Failure
+    CREATE_WINDOW_FAIL
 }
 
 /// Destructor Hook
@@ -209,8 +248,14 @@ unsafe extern "thiscall" fn hook_create_window(
 unsafe extern "thiscall" fn hook_dtor(this: *mut c_void) {
     log::trace!(">>> ENTER MSNChatEdit4 dtor: {:?}", this);
 
-    let mut map = get_controls().lock().unwrap();
-    map.remove(&(this as usize));
+    match get_controls().lock() {
+        Ok(mut map) => {
+            map.remove(&(this as usize));
+        }
+        Err(err) => {
+            log::error!("MSNChatEdit4 dtor map lock poisoned: {}", err);
+        }
+    }
 }
 
 /// Applies all MinHook detours for this object lifecycle.
@@ -221,17 +266,13 @@ pub unsafe fn apply(info: &ModuleInfo) -> Result<(), String> {
     log::info!("Patching MSNChatEdit4 Lifecycle methods...");
 
     VTABLE_PTR
-        .set(info.resolve(0x37203FD0) as usize)
+        .set(info.resolve(ADDR_EDIT4_VTABLE) as usize)
         .map_err(|_| "Failed to set VTABLE_PTR")?;
 
-    VTABLE_PTR
-        .set(info.resolve(0x37203FD0) as usize)
-        .map_err(|_| "Failed to set VTABLE_PTR")?;
-
-    let ctor_target = info.resolve(0x37226403);
-    let create_window_target = info.resolve(0x37225F94);
-    let dtor_target = info.resolve(0x37225931);
-    let wnd_proc_target = info.resolve(0x3721FEDA);
+    let ctor_target = info.resolve(ADDR_EDIT4_CTOR);
+    let create_window_target = info.resolve(ADDR_EDIT4_CREATE_WINDOW);
+    let dtor_target = info.resolve(ADDR_EDIT4_DTOR);
+    let wnd_proc_target = info.resolve(ADDR_EDIT4_WND_PROC);
 
     unsafe {
         minhook::MinHook::create_hook(ctor_target, hook_ctor as *mut c_void)
