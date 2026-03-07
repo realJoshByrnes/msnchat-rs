@@ -15,6 +15,13 @@ pub struct ManualModule {
 unsafe impl Send for ManualModule {}
 unsafe impl Sync for ManualModule {}
 
+pub static OCX_RESOURCE_MODULE: std::sync::OnceLock<isize> = std::sync::OnceLock::new();
+
+pub fn get_ocx_hinstance() -> HINSTANCE {
+    let val = *OCX_RESOURCE_MODULE.get().unwrap_or(&0);
+    HINSTANCE(val as *mut c_void)
+}
+
 impl ManualModule {
     /// # Safety
     /// This function loads and executes native code from memory, which inherently bypasses
@@ -101,6 +108,70 @@ impl ManualModule {
             }
             log::info!("Applied base relocations successfully");
 
+            OCX_RESOURCE_MODULE
+                .set(base_ptr as isize)
+                .unwrap_or_default();
+
+            // --- IAT Resource Proxy Functions ---
+
+            fn get_resource_module() -> HINSTANCE {
+                get_ocx_hinstance()
+            }
+
+            #[allow(non_snake_case)]
+            unsafe extern "system" fn proxy_LoadMenuA(
+                hinstance: HINSTANCE,
+                lpmenuname: PCSTR,
+            ) -> windows::Win32::UI::WindowsAndMessaging::HMENU {
+                let mut inst = hinstance;
+                let res_mod = get_resource_module();
+                unsafe {
+                    if (hinstance.0 == res_mod.0 || hinstance.0.is_null()) && !res_mod.0.is_null() {
+                        inst = res_mod;
+                    }
+                    windows::Win32::UI::WindowsAndMessaging::LoadMenuA(Some(inst), lpmenuname)
+                        .unwrap_or_default()
+                }
+            }
+
+            #[allow(non_snake_case)]
+            unsafe extern "system" fn proxy_LoadCursorA(
+                hinstance: HINSTANCE,
+                lpcursorname: PCSTR,
+            ) -> windows::Win32::UI::WindowsAndMessaging::HCURSOR {
+                let mut inst = hinstance;
+                let res_mod = get_resource_module();
+                unsafe {
+                    if (hinstance.0 == res_mod.0 || hinstance.0.is_null()) && !res_mod.0.is_null() {
+                        inst = res_mod;
+                    }
+                    windows::Win32::UI::WindowsAndMessaging::LoadCursorA(Some(inst), lpcursorname)
+                        .unwrap_or_default()
+                }
+            }
+
+            #[allow(non_snake_case)]
+            unsafe extern "system" fn proxy_ImageList_LoadImageA(
+                hi: HINSTANCE,
+                lpbmp: PCSTR,
+                cx: i32,
+                cgrow: i32,
+                crmask: windows::Win32::Foundation::COLORREF,
+                utype: u32,
+                uflags: windows::Win32::UI::WindowsAndMessaging::IMAGE_FLAGS,
+            ) -> windows::Win32::UI::Controls::HIMAGELIST {
+                let mut inst = hi;
+                let res_mod = get_resource_module();
+                unsafe {
+                    if (hi.0 == res_mod.0 || hi.0.is_null()) && !res_mod.0.is_null() {
+                        inst = res_mod;
+                    }
+                    windows::Win32::UI::Controls::ImageList_LoadImageA(
+                        inst, lpbmp, cx, cgrow, crmask, utype, uflags,
+                    )
+                }
+            }
+
             // 5. Parse Imports
             if let Ok(imports) = pe.imports() {
                 for desc in imports {
@@ -125,16 +196,33 @@ impl ManualModule {
                             let proc_addr = if is_ordinal {
                                 let ordinal = thunk & 0xFFFF;
                                 GetProcAddress(hmod, PCSTR::from_raw(ordinal as *const u8))
+                                    .map(|f| f as usize as *mut c_void)
                             } else {
                                 let name_rva = (thunk & 0x7FFFFFFF) as usize;
                                 let name_ptr = base_ptr.add(name_rva + 2);
-                                GetProcAddress(hmod, PCSTR::from_raw(name_ptr))
+                                let name_cstr = std::ffi::CStr::from_ptr(name_ptr as *const i8);
+                                let name_str = name_cstr.to_str().unwrap_or("");
+
+                                if name_str == "LoadMenuA" {
+                                    Some(proxy_LoadMenuA as usize as *mut c_void)
+                                } else if name_str == "LoadCursorA" {
+                                    Some(proxy_LoadCursorA as usize as *mut c_void)
+                                } else if name_str == "ImageList_LoadImageA" {
+                                    Some(proxy_ImageList_LoadImageA as usize as *mut c_void)
+                                } else {
+                                    GetProcAddress(hmod, PCSTR::from_raw(name_ptr))
+                                        .map(|f| f as usize as *mut c_void)
+                                }
                             };
 
                             if let Some(addr) = proc_addr {
                                 *iat.add(i) = addr as usize;
                             } else {
-                                return Err(format!("Failed to resolve import in {}", dll_str));
+                                let name_rva = (thunk & 0x7FFFFFFF) as usize;
+                                let name_ptr = base_ptr.add(name_rva + 2);
+                                let name_cstr = std::ffi::CStr::from_ptr(name_ptr as *const i8);
+                                let name_str = name_cstr.to_str().unwrap_or("");
+                                log::warn!("Failed to resolve import {} in {}", name_str, dll_str);
                             }
                             i += 1;
                         }
