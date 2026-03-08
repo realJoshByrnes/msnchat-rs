@@ -1,0 +1,42 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Debug MSVC (Visual Studio Debugger)",
+            "type": "cppvsdbg",
+            "request": "launch",
+            "preLaunchTask": "build-msvc",
+            "program": "${workspaceFolder}/target/i686-pc-windows-msvc/debug/msnchat-rs.exe",
+            "cwd": "${workspaceFolder}",
+            "console": "externalTerminal"
+        },
+        {
+            "name": "Debug MSVC (CodeLLDB)",
+            "type": "lldb",
+            "request": "launch",
+            "preLaunchTask": "build-msvc",
+            "program": "${workspaceFolder}/target/i686-pc-windows-msvc/debug/msnchat-rs.exe",
+            "cwd": "${workspaceFolder}",
+            "console": "externalTerminal",
+            "postRunCommands": [
+                "script STATUS_WX86_BREAKPOINT = '0x4000001f'",
+                "script LOADER_INIT_FUNC = 'LdrInitShimEngineDynamic'",
+                "target stop-hook add -o \"script if STATUS_WX86_BREAKPOINT in lldb.process.GetSelectedThread().GetStopDescription(100) and LOADER_INIT_FUNC in str(lldb.process.GetSelectedThread().GetSelectedFrame().GetFunctionName()): lldb.process.Continue()\""
+            ]
+        },
+        {
+            "name": "Debug MinGW (CodeLLDB)",
+            "type": "lldb",
+            "request": "launch",
+            "preLaunchTask": "build-gnu",
+            "program": "${workspaceFolder}/target/i686-pc-windows-gnu/debug/msnchat-rs.exe",
+            "cwd": "${workspaceFolder}",
+            "console": "externalTerminal",
+            "postRunCommands": [
+                "script STATUS_WX86_BREAKPOINT = '0x4000001f'",
+                "script LOADER_INIT_FUNC = 'LdrInitShimEngineDynamic'",
+                "target stop-hook add -o \"script if STATUS_WX86_BREAKPOINT in lldb.process.GetSelectedThread().GetStopDescription(100) and LOADER_INIT_FUNC in str(lldb.process.GetSelectedThread().GetSelectedFrame().GetFunctionName()): lldb.process.Continue()\""
+            ]
+        }
+    ]
+}

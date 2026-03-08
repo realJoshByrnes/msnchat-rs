@@ -1,0 +1,19 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "build-msvc",
+            "type": "shell",
+            "command": "cargo build --target i686-pc-windows-msvc",
+            "problemMatcher": ["$codelldb-rustc"],
+            "group": "build"
+        },
+        {
+            "label": "build-gnu",
+            "type": "shell",
+            "command": "cargo build --target i686-pc-windows-gnu",
+            "problemMatcher": ["$codelldb-rustc"],
+            "group": "build"
+        }
+    ]
+}
