@@ -33,12 +33,21 @@ fn main() {
             // winres defaults to plain "windres"/"ar" on Unix, but cross toolchains
             // usually provide target-prefixed binaries.
             if target.contains("windows-gnu") {
-                if target.starts_with("i686-") {
-                    res.set_windres_path("i686-w64-mingw32-windres")
-                        .set_ar_path("i686-w64-mingw32-ar");
-                } else if target.starts_with("x86_64-") {
-                    res.set_windres_path("x86_64-w64-mingw32-windres")
-                        .set_ar_path("x86_64-w64-mingw32-ar");
+                // If the HOST is windows, the binaries don't have prefixes
+                let is_windows_host = cfg!(windows);
+
+                if is_windows_host {
+                    // MSYS2/MinGW local names
+                    res.set_windres_path("windres.exe").set_ar_path("ar.exe");
+                } else {
+                    // Linux cross-compiler names
+                    if target.starts_with("i686-") {
+                        res.set_windres_path("i686-w64-mingw32-windres")
+                            .set_ar_path("i686-w64-mingw32-ar");
+                    } else if target.starts_with("x86_64-") {
+                        res.set_windres_path("x86_64-w64-mingw32-windres")
+                            .set_ar_path("x86_64-w64-mingw32-ar");
+                    }
                 }
             }
 
