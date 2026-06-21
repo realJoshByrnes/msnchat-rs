@@ -39,6 +39,8 @@ fn main() -> Result<()> {
 
         let random_id = (uuid::Uuid::new_v4().as_u128() % 10000) as u32;
         let nickname = format!("JD{:04}", random_id);
+        let _ = host.put_property("AuditMessage", "Note: MSN has detected that you are connected to this chat session from the IP address <b>%1</b>.");
+        let _ = host.put_property("MessageOfTheDay", "Welcome to MSN Chat. Important: MSN does not control or endorse the content, messages or information found in chat. MSN specifically disclaims any liability with regard to these areas. To review the guidelines for use of MSN Chat, go to http://chat.msn.com/conduct.asp.");
         let _ = host.put_property("NickName", &nickname);
         let _ = host.put_property("RoomName", "The Lobby");
         let _ = host.put_property("Server", "dir.irc7.com");
