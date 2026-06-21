@@ -41,6 +41,9 @@ unsafe extern "system" fn h_load_library_w(lp_lib_file_name: PCWSTR) -> HMODULE 
             if let Err(e) = unsafe { crate::patch::sound_patch::apply(&module_info) } {
                 log::error!("Failed to apply sound patches: {}", e);
             }
+            if let Err(e) = unsafe { crate::patch::network::apply(&module_info) } {
+                log::error!("Failed to apply socket patches: {}", e);
+            }
 
             // Apply queued hooks
             if let Err(status) = unsafe { minhook::MinHook::apply_queued() } {

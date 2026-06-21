@@ -12,6 +12,13 @@ This file tracks the functions hooked and patched within the `MsnChat45.ocx` con
 | `sub_3723E750` | 🟡 | Channel Server Send. Detours outgoing room messages/commands to log them, then calls the trampoline. | [channel/send.rs](file:///c:/Users/jd/Desktop/MSN%20Chat%20Control/redmond-chat/src/patch/channel/send.rs) |
 | `sub_3723EAE1` | 🟡 | Channel Server Recv. Detours incoming room responses to log them, then calls the trampoline. | [channel/recv.rs](file:///c:/Users/jd/Desktop/MSN%20Chat%20Control/redmond-chat/src/patch/channel/recv.rs) |
 | `PlaySoundA` (`winmm.dll`) | 🟢 | Intercepted to exclusively stop our Rust rodio background player when a null sound pointer is passed. | [sound_patch.rs](file:///c:/Users/jd/Desktop/MSN%20Chat%20Control/redmond-chat/src/patch/sound_patch.rs) |
+| `sub_37232EB9` | 🟢 | Socket::Create. Replaced to generate a custom Rust Socket ID and track it in our async registry. | [network.rs](file:///c:/Users/jd/Desktop/MSN%20Chat%20Control/redmond-chat/src/patch/network.rs) |
+| `sub_37232F00` | 🟢 | Socket::Close. Replaced to close the Tokio reader/writer tasks and clean up the active socket registry. | [network.rs](file:///c:/Users/jd/Desktop/MSN%20Chat%20Control/redmond-chat/src/patch/network.rs) |
+| `sub_37232F1D` | 🟢 | Socket::Connect. Bypasses native winsock connect; resolves the hostname and starts a Tokio TcpStream connection. | [network.rs](file:///c:/Users/jd/Desktop/MSN%20Chat%20Control/redmond-chat/src/patch/network.rs) |
+| `sub_37232FC2` | 🟢 | Socket::Shutdown. Shuts down reading and writing halves of the Tokio TCP connection. | [network.rs](file:///c:/Users/jd/Desktop/MSN%20Chat%20Control/redmond-chat/src/patch/network.rs) |
+| `sub_37232FDD` | 🟢 | Socket::Receive. Reads data directly from the thread-safe Tokio reader memory buffer. | [network.rs](file:///c:/Users/jd/Desktop/MSN%20Chat%20Control/redmond-chat/src/patch/network.rs) |
+| `sub_37233000` | 🟢 | Socket::Send. Writes data directly to the Tokio socket writer task channel. | [network.rs](file:///c:/Users/jd/Desktop/MSN%20Chat%20Control/redmond-chat/src/patch/network.rs) |
+| `sub_372329D0` | 🟢 | SocketManager::Register. Intercepts callback pointer registration to link async Tokio events to OCX handlers. | [network.rs](file:///c:/Users/jd/Desktop/MSN%20Chat%20Control/redmond-chat/src/patch/network.rs) |
 
 ## Legend
 

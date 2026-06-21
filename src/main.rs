@@ -4,6 +4,7 @@ use windows::core::{GUID, Result};
 pub mod audio;
 pub mod auth;
 pub mod host;
+pub mod network;
 pub mod patch;
 
 use host::window::OcxWindow;
@@ -39,7 +40,6 @@ fn main() -> Result<()> {
         let random_id = (uuid::Uuid::new_v4().as_u128() % 10000) as u32;
         let nickname = format!("JD{:04}", random_id);
         let _ = host.put_property("NickName", &nickname);
-
         let _ = host.put_property("RoomName", "The Lobby");
         let _ = host.put_property("Server", "dir.irc7.com");
     }) {

@@ -338,18 +338,18 @@
 | 0x372012E0 | OleCreatePropertyFrame | OLEAUT32 |  |
 | 0x372012D4 | OleCreateFontIndirect | OLEAUT32 |  |
 | 0x372012D8 | OleTranslateColor | OLEAUT32 |  |
-| 0x37201530 | closesocket | WSOCK32 |  |
-| 0x3720152C | connect | WSOCK32 |  |
-| 0x37201528 | htons | WSOCK32 |  |
-| 0x37201524 | inet_addr | WSOCK32 |  |
+| 0x37201530 | closesocket | WSOCK32 | x |
+| 0x3720152C | connect | WSOCK32 | x |
+| 0x37201528 | htons | WSOCK32 | x |
+| 0x37201524 | inet_addr | WSOCK32 | x |
 | 0x37201558 | __imp_inet_ntoa | WSOCK32 |  |
-| 0x37201538 | ioctlsocket | WSOCK32 |  |
-| 0x37201520 | recv | WSOCK32 |  |
-| 0x3720153C | select | WSOCK32 |  |
-| 0x3720151C | send | WSOCK32 |  |
-| 0x3720155C | shutdown | WSOCK32 |  |
-| 0x37201534 | socket | WSOCK32 |  |
-| 0x37201554 | __imp_gethostbyname | WSOCK32 |  |
+| 0x37201538 | ioctlsocket | WSOCK32 | x |
+| 0x37201520 | recv | WSOCK32 | x |
+| 0x3720153C | select | WSOCK32 | x |
+| 0x3720151C | send | WSOCK32 | x |
+| 0x3720155C | shutdown | WSOCK32 | x |
+| 0x37201534 | socket | WSOCK32 | x |
+| 0x37201554 | __imp_gethostbyname | WSOCK32 | x |
 | 0x37201550 | __imp_gethostname | WSOCK32 |  |
 | 0x37201540 | WSAGetLastError | WSOCK32 |  |
 | 0x3720154C | WSAStartup | WSOCK32 |  |
