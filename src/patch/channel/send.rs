@@ -1,4 +1,4 @@
-use crate::module_info::ModuleInfo;
+use crate::patch::module_info::ModuleInfo;
 use std::ffi::c_void;
 use windows::Win32::System::Threading::CRITICAL_SECTION;
 use windows::core::PCSTR;

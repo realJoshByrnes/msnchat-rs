@@ -1,0 +1,11 @@
+name: IDA Pro MCP Server
+version: 0.0.1
+schema: v1
+mcpServers:
+  - name: ida-pro-mcp
+    command: "C:\\Users\\jd\\AppData\\Local\\Programs\\Python\\Python313\\python.exe"
+    args:
+      - "C:\\Users\\jd\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\ida_pro_mcp\\server.py"
+      - "--ida-rpc"
+      - "http://127.0.0.1:13337"
+    env: {}

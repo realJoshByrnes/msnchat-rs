@@ -3,9 +3,11 @@ use std::ffi::c_void;
 
 pub mod channel;
 pub mod directory;
-pub mod fixed_3720e0a5;
-pub mod fixed_3721da6c;
+pub mod gatekeeper_id;
 pub mod loader_hook;
+pub mod module_info;
+pub mod sound_patch;
+pub mod virtual_protect;
 
 /// # Safety
 ///

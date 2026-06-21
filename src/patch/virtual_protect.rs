@@ -6,7 +6,7 @@ use windows::{
     core::BOOL,
 };
 
-use crate::module_info::ModuleInfo;
+use super::module_info::ModuleInfo;
 
 // BOOL __thiscall sub_3720E0A5(_DWORD *lpBaseAddress, int a2, int a3)
 // {
@@ -30,7 +30,7 @@ static mut TRAMPOLINE: Option<Sub3720E0A5> = None;
 /// This function is unsafe because it installs hooks on module load.
 pub unsafe fn apply(info: &ModuleInfo) -> Result<(), String> {
     let target = info.resolve(0x3720e0a5);
-    let trampoline = unsafe { super::hook(target, fixed_3720e0a5 as *mut c_void) }?;
+    let trampoline = unsafe { super::hook(target, detour_virtual_protect as *mut c_void) }?;
 
     // SAFETY: Single threaded init
     unsafe { TRAMPOLINE = Some(std::mem::transmute::<*mut c_void, Sub3720E0A5>(trampoline)) };
@@ -38,7 +38,11 @@ pub unsafe fn apply(info: &ModuleInfo) -> Result<(), String> {
 }
 
 #[unsafe(no_mangle)]
-unsafe extern "thiscall" fn fixed_3720e0a5(lp_base_address: *mut c_void, a2: i32, a3: i32) -> BOOL {
+unsafe extern "thiscall" fn detour_virtual_protect(
+    lp_base_address: *mut c_void,
+    a2: i32,
+    a3: i32,
+) -> BOOL {
     let mut old_protect = PAGE_PROTECTION_FLAGS::default();
     // Make the memory executable (13 bytes written by original fn)
     unsafe {

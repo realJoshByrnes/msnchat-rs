@@ -1,13 +1,12 @@
 use windows::Win32::System::Ole::OleInitialize;
 use windows::core::{GUID, Result};
 
+pub mod audio;
 pub mod auth;
 pub mod host;
-pub mod module_info;
 pub mod patch;
-pub mod window;
 
-use window::OcxWindow;
+use host::window::OcxWindow;
 
 fn main() -> Result<()> {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
@@ -36,7 +35,11 @@ fn main() -> Result<()> {
     match main_window.attach_ocx(dll_path, &clsid, |host| {
         let _ = host.put_property("BaseURL", "http://chat.msn.com/");
         let _ = host.put_property("Market", "en-au");
-        let _ = host.put_property("NickName", "JD[ocx]");
+
+        let random_id = (uuid::Uuid::new_v4().as_u128() % 10000) as u32;
+        let nickname = format!("JD{:04}", random_id);
+        let _ = host.put_property("NickName", &nickname);
+
         let _ = host.put_property("RoomName", "The Lobby");
         let _ = host.put_property("Server", "dir.irc7.com");
     }) {

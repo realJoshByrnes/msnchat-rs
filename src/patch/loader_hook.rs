@@ -1,4 +1,4 @@
-use crate::module_info::ModuleInfo;
+use super::module_info::ModuleInfo;
 use std::ffi::c_void;
 use windows::Win32::Foundation::HMODULE;
 use windows::core::{PCSTR, PCWSTR};
@@ -6,6 +6,7 @@ use windows::core::{PCSTR, PCWSTR};
 type LoadLibraryWType = unsafe extern "system" fn(PCWSTR) -> HMODULE;
 
 static mut O_LOAD_LIBRARY_W: Option<LoadLibraryWType> = None;
+pub static mut OCX_MODULE: Option<HMODULE> = None;
 
 #[unsafe(no_mangle)]
 unsafe extern "system" fn h_load_library_w(lp_lib_file_name: PCWSTR) -> HMODULE {
@@ -20,19 +21,25 @@ unsafe extern "system" fn h_load_library_w(lp_lib_file_name: PCWSTR) -> HMODULE 
         // The file string is often an absolute path, we'll check if it ends with the name
         if name.ends_with("msnchat45.ocx") {
             log::info!("Intercepted MsnChat45.ocx load, applying patches...");
+            unsafe {
+                OCX_MODULE = Some(result);
+            }
 
             let module_info = ModuleInfo::new(result.0 as usize);
-            if let Err(e) = unsafe { crate::patch::fixed_3721da6c::apply(&module_info) } {
-                log::error!("Failed to apply 3721da6c patch: {}", e);
+            if let Err(e) = unsafe { crate::patch::gatekeeper_id::apply(&module_info) } {
+                log::error!("Failed to apply gatekeeper_id patch: {}", e);
             }
-            if let Err(e) = unsafe { crate::patch::fixed_3720e0a5::apply(&module_info) } {
-                log::error!("Failed to apply 3720e0a5 patch: {}", e);
+            if let Err(e) = unsafe { crate::patch::virtual_protect::apply(&module_info) } {
+                log::error!("Failed to apply virtual_protect patch: {}", e);
             }
             if let Err(e) = unsafe { crate::patch::directory::apply(&module_info) } {
                 log::error!("Failed to apply Directory Server patches: {}", e);
             }
             if let Err(e) = unsafe { crate::patch::channel::apply(&module_info) } {
                 log::error!("Failed to apply Channel Server patches: {}", e);
+            }
+            if let Err(e) = unsafe { crate::patch::sound_patch::apply(&module_info) } {
+                log::error!("Failed to apply sound patches: {}", e);
             }
 
             // Apply queued hooks

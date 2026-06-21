@@ -1,4 +1,4 @@
-use crate::module_info::ModuleInfo;
+use crate::patch::module_info::ModuleInfo;
 use std::ffi::c_void;
 
 type OnLineReceivedFn =
