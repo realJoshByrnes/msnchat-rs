@@ -48,6 +48,21 @@ unsafe extern "system" fn query_interface(
             *ppv = frame as *mut c_void;
             super::frame::add_ref(frame as *mut c_void);
             S_OK
+        } else if riid == &super::events::IID_ICCHATFRAMEEVENTS {
+            let events = (*shared).events;
+            *ppv = events as *mut c_void;
+            super::events::add_ref(events as *mut c_void);
+            S_OK
+        } else if riid == &super::navigate::IID_IOLENAVIGATE {
+            let navigate = (*shared).navigate;
+            *ppv = navigate as *mut c_void;
+            super::navigate::add_ref(navigate as *mut c_void);
+            S_OK
+        } else if riid == &super::provider::IID_ISERVICEPROVIDER {
+            let provider = (*shared).provider;
+            *ppv = provider as *mut c_void;
+            super::provider::add_ref(provider as *mut c_void);
+            S_OK
         } else {
             *ppv = std::ptr::null_mut();
             E_NOINTERFACE
