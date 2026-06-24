@@ -102,6 +102,7 @@ impl OcxHost {
             (*self.wrappers._shared).hwnd = hwnd;
 
             let client_site_raw = self.wrappers.client_site as *mut std::ffi::c_void;
+            super::site::client::add_ref(client_site_raw);
             let client_site = IOleClientSite::from_raw(client_site_raw);
 
             self.ole_object.SetClientSite(&client_site)?;
@@ -109,7 +110,9 @@ impl OcxHost {
             // Query connection point container and advise our event sink
             if let Ok(cpc) = self.ole_object.cast::<windows::Win32::System::Com::IConnectionPointContainer>() {
                 if let Ok(cp) = cpc.FindConnectionPoint(&super::site::events::IID_ICCHATFRAMEEVENTS) {
-                    let events_unk = IUnknown::from_raw(self.wrappers.events as *mut std::ffi::c_void);
+                    let events_raw = self.wrappers.events as *mut std::ffi::c_void;
+                    super::site::events::add_ref(events_raw);
+                    let events_unk = IUnknown::from_raw(events_raw);
                     let _cookie = cp.Advise(&events_unk);
                 }
             }
