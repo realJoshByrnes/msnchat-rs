@@ -64,6 +64,15 @@ impl OcxHost {
 
             let ole_object: IOleObject = unk.cast()?;
 
+            if let Ok(size) = ole_object.GetExtent(windows::Win32::System::Com::DVASPECT(1)) {
+                log::info!(
+                    "ActiveX Control CLSID {:?} extent: cx={}, cy={}",
+                    clsid,
+                    size.cx,
+                    size.cy
+                );
+            }
+
             let dummy_hwnd = HWND(std::ptr::null_mut());
             let wrappers = Box::new(create_host_wrappers(dummy_hwnd));
 
@@ -139,6 +148,13 @@ impl OcxHost {
         Ok(())
     }
 
+    pub fn get_extent(&self) -> Result<windows::Win32::Foundation::SIZE> {
+        unsafe {
+            self.ole_object
+                .GetExtent(windows::Win32::System::Com::DVASPECT(1))
+        }
+    }
+
     pub fn dispatch(&self) -> Result<windows::Win32::System::Com::IDispatch> {
         self.ole_object.cast()
     }
@@ -167,8 +183,10 @@ impl OcxHost {
 
             let call_put_bstr = |index: usize, val: &str| -> Result<()> {
                 let func_ptr = *vtable.add(index);
-                let func: unsafe extern "system" fn(*mut std::ffi::c_void, windows::core::BSTR) -> windows::core::HRESULT =
-                    std::mem::transmute(func_ptr);
+                let func: unsafe extern "system" fn(
+                    *mut std::ffi::c_void,
+                    windows::core::BSTR,
+                ) -> windows::core::HRESULT = std::mem::transmute(func_ptr);
                 let bstr = windows::core::BSTR::from(val);
                 let hr = func(this_ptr, bstr);
                 hr.ok()
@@ -176,16 +194,20 @@ impl OcxHost {
 
             let call_put_i32 = |index: usize, val: i32| -> Result<()> {
                 let func_ptr = *vtable.add(index);
-                let func: unsafe extern "system" fn(*mut std::ffi::c_void, i32) -> windows::core::HRESULT =
-                    std::mem::transmute(func_ptr);
+                let func: unsafe extern "system" fn(
+                    *mut std::ffi::c_void,
+                    i32,
+                ) -> windows::core::HRESULT = std::mem::transmute(func_ptr);
                 let hr = func(this_ptr, val);
                 hr.ok()
             };
 
             let call_put_u32 = |index: usize, val: u32| -> Result<()> {
                 let func_ptr = *vtable.add(index);
-                let func: unsafe extern "system" fn(*mut std::ffi::c_void, u32) -> windows::core::HRESULT =
-                    std::mem::transmute(func_ptr);
+                let func: unsafe extern "system" fn(
+                    *mut std::ffi::c_void,
+                    u32,
+                ) -> windows::core::HRESULT = std::mem::transmute(func_ptr);
                 let hr = func(this_ptr, val);
                 hr.ok()
             };

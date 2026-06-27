@@ -65,7 +65,7 @@ fn main() -> Result<()> {
         std::sync::Arc::new(unsafe { patch::pe::ManualModule::load(dll_bytes) }.unwrap());
 
     // Attempt to load and embed the control
-    match main_window.attach_ocx(manual_module, &clsid, |host| {
+    match main_window.attach_ocx(manual_module.clone(), &clsid, |host| {
         let _ = host.put_property("BaseURL", "http://chat.msn.com/");
         let _ = host.put_property("Market", "en-au");
 
