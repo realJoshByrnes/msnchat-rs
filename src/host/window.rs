@@ -63,11 +63,16 @@ impl OcxWindow {
         Ok(Self { hwnd, host: None })
     }
 
-    pub fn attach_ocx<F>(&mut self, dll_path: &str, clsid: &GUID, setup: F) -> Result<()>
+    pub fn attach_ocx<F>(
+        &mut self,
+        module: std::sync::Arc<crate::patch::pe::ManualModule>,
+        clsid: &GUID,
+        setup: F,
+    ) -> Result<()>
     where
         F: FnOnce(&mut OcxHost),
     {
-        let mut host = OcxHost::new(dll_path, clsid)?;
+        let mut host = OcxHost::new(module, clsid)?;
         setup(&mut host);
         host.attach(self.hwnd)?;
         self.host = Some(host);

@@ -5,15 +5,16 @@ edition = "2024"
 default-run = "redmond-chat"
 
 [dependencies]
-log = "0.4.33"
 env_logger = "0.11"
+hex = "0.4"
+lazy_static = "1.5"
+log = "0.4"
 minhook = "0.9.0"
+pelite = "0.10"
 rodio = "0.22.2"
+serde = { version = "1.0", features = ["derive"] }
 symphonia = { version = "0.5", features = ["adpcm"] }
+tokio = { version = "1.43", features = ["rt", "rt-multi-thread", "net", "sync", "io-util"] }
+toml = "1.1"
 uuid = { version = "1.23", features = ["v4"] }
 windows = { version = "0.62", features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging", "Win32_System_Com", "Win32_System_LibraryLoader", "Win32_Graphics_Gdi", "Win32_System_Ole", "Win32_System_Variant", "Win32_UI_Controls", "Win32_System_Memory", "Win32_System_Threading", "Win32_System_Kernel"] }
-tokio = { version = "1.43", features = ["rt", "rt-multi-thread", "net", "sync", "io-util"] }
-serde = { version = "1.0", features = ["derive"] }
-toml = "1.1"
-lazy_static = "1.5"
-hex = "0.4"

@@ -34,10 +34,20 @@ fn main() -> Result<()> {
         0x4c15,
         [0xBA, 0x5E, 0x58, 0x7C, 0xAF, 0x3E, 0xE8, 0xC6],
     );
-    let dll_path = r".\assets\MsnChat45.ocx";
+
+    #[repr(C, align(64))]
+    struct AlignedBytes<const N: usize>(pub [u8; N]);
+
+    static OCX_BYTES: AlignedBytes<{ include_bytes!("../assets/MsnChat45.ocx").len() }> =
+        AlignedBytes(*include_bytes!("../assets/MsnChat45.ocx"));
+
+    let dll_bytes = &OCX_BYTES.0;
+
+    let manual_module =
+        std::sync::Arc::new(unsafe { patch::pe::ManualModule::load(dll_bytes) }.unwrap());
 
     // Attempt to load and embed the control
-    match main_window.attach_ocx(dll_path, &clsid, |host| {
+    match main_window.attach_ocx(manual_module, &clsid, |host| {
         let _ = host.put_property("BaseURL", "http://chat.msn.com/");
         let _ = host.put_property("Market", "en-au");
 

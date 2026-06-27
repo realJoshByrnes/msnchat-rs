@@ -6,6 +6,7 @@ pub mod directory;
 pub mod loader_hook;
 pub mod module_info;
 pub mod network;
+pub mod pe;
 pub mod registry_hook;
 pub mod sound_patch;
 pub mod virtual_protect;

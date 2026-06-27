@@ -1,14 +1,13 @@
 use windows::{
     Win32::{
-        Foundation::{E_FAIL, HMODULE, HWND, RECT},
+        Foundation::{E_FAIL, HWND, RECT},
         System::{
             Com::IClassFactory,
-            LibraryLoader::{GetProcAddress, LoadLibraryW},
             Ole::{IOleClientSite, IOleInPlaceObject, IOleObject, OLEIVERB_SHOW},
         },
         UI::WindowsAndMessaging::GetClientRect,
     },
-    core::{GUID, IUnknown, Interface, PCSTR, Result},
+    core::{GUID, IUnknown, Interface, Result},
 };
 
 use super::site::{HostWrappers, create_host_wrappers};
@@ -20,11 +19,10 @@ type DllGetClassObjectFunc = unsafe extern "system" fn(
 ) -> windows::core::HRESULT;
 
 pub struct OcxHost {
-    _module: HMODULE,
+    pub module: std::sync::Arc<crate::patch::pe::ManualModule>,
     ole_object: IOleObject,
     inplace_object: Option<IOleInPlaceObject>,
     wrappers: Box<HostWrappers>,
-    type_info: windows::Win32::System::Com::ITypeInfo,
 }
 
 impl Drop for OcxHost {
@@ -41,31 +39,17 @@ impl Drop for OcxHost {
 }
 
 impl OcxHost {
-    pub fn new(dll_path: &str, clsid: &GUID) -> Result<Self> {
+    pub fn new(
+        module: std::sync::Arc<crate::patch::pe::ManualModule>,
+        clsid: &GUID,
+    ) -> Result<Self> {
         unsafe {
-            let path_w = windows::core::HSTRING::from(dll_path);
-            let module = LoadLibraryW(&path_w)?;
+            let get_class_object_ptr = module.get_export("DllGetClassObject").map_err(|e| {
+                log::error!("DllGetClassObject not found: {}", e);
+                windows::core::Error::from_hresult(windows::core::HRESULT(E_FAIL.0))
+            })?;
 
-            if module.is_invalid() {
-                return Err(windows::core::Error::from_hresult(windows::core::HRESULT(
-                    E_FAIL.0,
-                )));
-            }
-
-            let func_name = PCSTR::from_raw(c"DllGetClassObject".as_ptr() as *const u8);
-            let get_class_object_ptr = GetProcAddress(module, func_name);
-
-            let get_class_object: DllGetClassObjectFunc = match get_class_object_ptr {
-                Some(p) => std::mem::transmute::<
-                    unsafe extern "system" fn() -> isize,
-                    DllGetClassObjectFunc,
-                >(p),
-                None => {
-                    return Err(windows::core::Error::from_hresult(windows::core::HRESULT(
-                        E_FAIL.0,
-                    )));
-                }
-            };
+            let get_class_object: DllGetClassObjectFunc = std::mem::transmute(get_class_object_ptr);
 
             let mut factory_ptr: *mut std::ffi::c_void = std::ptr::null_mut();
             let hr = get_class_object(clsid as *const GUID, &IClassFactory::IID, &mut factory_ptr);
@@ -83,16 +67,11 @@ impl OcxHost {
             let dummy_hwnd = HWND(std::ptr::null_mut());
             let wrappers = Box::new(create_host_wrappers(dummy_hwnd));
 
-            let dll_hstring = windows::core::HSTRING::from(dll_path);
-            let type_lib = windows::Win32::System::Ole::LoadTypeLib(&dll_hstring)?;
-            let type_info = type_lib.GetTypeInfo(0)?;
-
             Ok(Self {
-                _module: module,
+                module,
                 ole_object,
                 inplace_object: None,
                 wrappers,
-                type_info,
             })
         }
     }
@@ -166,23 +145,59 @@ impl OcxHost {
 
     pub fn put_property(&self, name: &str, value: &str) -> Result<()> {
         unsafe {
-            let dispatch = self.dispatch()?;
-
             use windows::Win32::System::Com::{DISPATCH_PROPERTYPUT, DISPPARAMS, EXCEPINFO};
             use windows::Win32::System::Ole::DISPID_PROPERTYPUT;
             use windows::Win32::System::Variant::{VARIANT, VARIANT_0_0, VT_BSTR};
             use windows::core::BSTR;
 
-            let mut dispid = 0;
-            let name_hstring = windows::core::HSTRING::from(name);
-            let name_pcwstr = windows::core::PCWSTR::from_raw(name_hstring.as_ptr());
+            let dispatch = self.dispatch()?;
 
-            let hr_id = self.type_info.GetIDsOfNames(&name_pcwstr, 1, &mut dispid);
-
-            if hr_id.is_err() {
-                println!("GetIDsOfNames failed for {}: {:?}", name, hr_id);
-                return hr_id;
-            }
+            let dispid = match name {
+                "BackColor" => -501,
+                "ForeColor" => -513,
+                "RoomName" => 2,
+                "HexRoomName" => 3,
+                "NickName" => 4,
+                "Server" => 5,
+                "BackHighlightColor" => 6,
+                "ButtonFrameColor" => 7,
+                "TopBackHighlightColor" => 8,
+                "ChatMode" => 9,
+                "URLBack" => 10,
+                "Category" => 11,
+                "Topic" => 12,
+                "WelcomeMsg" => 13,
+                "BaseURL" => 15,
+                "InputBorderColor" => 16,
+                "CreateRoom" => 17,
+                "ChatHome" => 19,
+                "Locale" => 20,
+                "ResDLL" => 21,
+                "ButtonTextColor" => 22,
+                "ButtonBackColor" => 23,
+                "PassportTicket" => 24,
+                "PassportProfile" => 25,
+                "Feature" => 26,
+                "MessageOfTheDay" => 27,
+                "ChannelLanguage" => 28,
+                "InvitationCode" => 29,
+                "NicknameToInvite" => 30,
+                "MSNREGCookie" => 31,
+                "CreationModes" => 32,
+                "MSNProfile" => 33,
+                "Market" => 34,
+                "WhisperContent" => 35,
+                "UserRole" => 36,
+                "AuditMessage" => 37,
+                "SubscriberInfo" => 38,
+                "UpsellURL" => 39,
+                _ => {
+                    log::error!("Unknown property name: {}", name);
+                    return Err(windows::core::Error::from_hresult(windows::core::HRESULT(
+                        E_FAIL.0,
+                    )));
+                }
+            };
 
             let bstr_val = BSTR::from(value);
             let mut variant = VARIANT::default();
@@ -193,7 +208,7 @@ impl OcxHost {
 
             let mut prop_put_dispid = DISPID_PROPERTYPUT;
 
-            let mut dispparams = DISPPARAMS {
+            let dispparams = DISPPARAMS {
                 rgvarg: &mut variant,
                 rgdispidNamedArgs: &mut prop_put_dispid,
                 cArgs: 1,
@@ -203,14 +218,15 @@ impl OcxHost {
             let mut excepinfo = EXCEPINFO::default();
             let mut argerr = 0;
 
-            let hr_invoke = self.type_info.Invoke(
-                dispatch.as_raw(),
+            let hr_invoke = dispatch.Invoke(
                 dispid,
+                &GUID::default(),
+                0, // LCID
                 DISPATCH_PROPERTYPUT,
-                &mut dispparams,
-                std::ptr::null_mut(),
-                &mut excepinfo,
-                &mut argerr,
+                &dispparams,
+                None,
+                Some(&mut excepinfo),
+                Some(&mut argerr),
             );
 
             if hr_invoke.is_err() {
