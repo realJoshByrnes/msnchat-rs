@@ -1,0 +1,133 @@
+use std::collections::HashMap;
+use std::fs::{self, File};
+use std::io::{self, Read};
+use std::path::{Path, PathBuf};
+use serde::{Serialize, Deserialize};
+use uuid::Uuid;
+
+#[derive(Serialize, Deserialize, Default, Debug, Clone)]
+pub struct SessionConfig {
+    pub token: String,
+    pub last_rotated: u32,
+}
+
+#[derive(Serialize, Deserialize, Default, Debug, Clone)]
+pub struct PathsConfig {
+    pub resource_dlls: Vec<PathBuf>,
+}
+
+// Sounds configuration is bypassed by sound_patch.rs, so it is removed from the config
+// #[derive(Serialize, Deserialize, Default, Debug, Clone)]
+// pub struct SoundsConfig {
+//     pub enabled: bool,
+//     pub media_dir: PathBuf,
+//     pub events: HashMap<String, String>,
+// }
+
+#[derive(Serialize, Deserialize, Default, Debug, Clone)]
+pub struct LicensingConfig {
+    pub guid: String, // Hex string of {E113C6A6-D44A-4639-A40E-3B6DE32A1A40}
+    pub hash: String, // Hex string of {5954F421-4768-46bc-B331-3DC37B1E7048}
+}
+
+#[derive(Serialize, Deserialize, Default, Debug, Clone)]
+pub struct MSNConfig {
+    pub session: SessionConfig,
+    pub paths: PathsConfig,
+    pub licensing: LicensingConfig,
+}
+
+pub struct MSNConfigManager {
+    config_path: PathBuf,
+}
+
+impl MSNConfigManager {
+    pub fn new(config_path: &Path) -> Self {
+        Self {
+            config_path: config_path.to_path_buf(),
+        }
+    }
+
+    /// Load configuration from config.toml, or initialize with defaults if missing
+    pub fn load(&self) -> io::Result<MSNConfig> {
+        if !self.config_path.exists() {
+            let default_config = MSNConfig::default();
+            self.save(&default_config)?;
+            return Ok(default_config);
+        }
+
+        let mut file = File::open(&self.config_path)?;
+        let mut contents = String::new();
+        file.read_to_string(&mut contents)?;
+        
+        toml::from_str(&contents)
+            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
+    }
+
+    /// Save configuration back to config.toml
+    pub fn save(&self, config: &MSNConfig) -> io::Result<()> {
+        let serialized = toml::to_string(config)
+            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+        fs::write(&self.config_path, serialized)
+    }
+
+    /// Rotates the daily unique session token if expired (older than 24 hours)
+    pub fn update_user_session(&self) -> io::Result<String> {
+        let mut config = self.load()?;
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs() as u32;
+        let day_seconds = 24 * 3600;
+
+        let token_expired = config.session.token.is_empty() 
+            || config.session.token.len() < 10 
+            || config.session.last_rotated == 0 
+            || (now - config.session.last_rotated) >= day_seconds;
+
+        if token_expired {
+            let new_token = Uuid::new_v4().simple().to_string();
+            config.session.token = new_token.clone();
+            config.session.last_rotated = now;
+            self.save(&config)?;
+            Ok(new_token)
+        } else {
+            Ok(config.session.token.clone())
+        }
+    }
+
+    /// Registers a resource DLL path to track for clean uninstallation
+    pub fn register_res_dll(&self, dll_path: &Path) -> io::Result<()> {
+        let mut config = self.load()?;
+        let path_buf = dll_path.to_path_buf();
+        if !config.paths.resource_dlls.contains(&path_buf) {
+            config.paths.resource_dlls.push(path_buf);
+            self.save(&config)?;
+        }
+        Ok(())
+    }
+
+    /// Cleans up registered resource DLL files and removes config paths
+    pub fn clean_and_unregister(&self) -> io::Result<()> {
+        let mut config = self.load()?;
+        for dll_path in &config.paths.resource_dlls {
+            let _ = fs::remove_file(dll_path);
+        }
+        config.paths.resource_dlls.clear();
+        self.save(&config)?;
+        Ok(())
+    }
+
+    // register_sounds is no longer needed since sounds are bypassed by sound_patch.rs
+    // pub fn register_sounds(&self, media_dir: &Path, sound_events: &[(&str, &str)]) -> io::Result<()> {
+    //     let mut config = self.load()?;
+    //     config.sounds.enabled = true;
+    //     config.sounds.media_dir = media_dir.to_path_buf();
+    //     
+    //     for &(event_id, wav_name) in sound_events {
+    //         config.sounds.events.insert(event_id.to_string(), wav_name.to_string());
+    //     }
+    //     
+    //     self.save(&config)
+    // }
+}

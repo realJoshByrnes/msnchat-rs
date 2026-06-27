@@ -2,7 +2,7 @@ use windows::Win32::System::Ole::OleInitialize;
 use windows::core::{GUID, Result};
 
 pub mod audio;
-pub mod auth;
+pub mod config;
 pub mod host;
 pub mod network;
 pub mod patch;
@@ -40,10 +40,13 @@ fn main() -> Result<()> {
         let random_id = (uuid::Uuid::new_v4().as_u128() % 10000) as u32;
         let nickname = format!("JD{:04}", random_id);
         let _ = host.put_property("AuditMessage", "Note: MSN has detected that you are connected to this chat session from the IP address <b>%1</b>.");
+        let _ = host.put_property("ChatMode", "0");
+        let _ = host.put_property("InvitationCode", "5355");
         let _ = host.put_property("MessageOfTheDay", "Welcome to MSN Chat. Important: MSN does not control or endorse the content, messages or information found in chat. MSN specifically disclaims any liability with regard to these areas. To review the guidelines for use of MSN Chat, go to http://chat.msn.com/conduct.asp.");
         let _ = host.put_property("NickName", &nickname);
         let _ = host.put_property("RoomName", "The Lobby");
         let _ = host.put_property("Server", "dir.irc7.com");
+        let _ = host.put_property("WhisperContent", "http://test.example.com/whisper");
     }) {
         Ok(_) => {
             // Run the standard message pump

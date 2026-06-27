@@ -26,9 +26,6 @@ unsafe extern "system" fn h_load_library_w(lp_lib_file_name: PCWSTR) -> HMODULE 
             }
 
             let module_info = ModuleInfo::new(result.0 as usize);
-            if let Err(e) = unsafe { crate::patch::gatekeeper_id::apply(&module_info) } {
-                log::error!("Failed to apply gatekeeper_id patch: {}", e);
-            }
             if let Err(e) = unsafe { crate::patch::virtual_protect::apply(&module_info) } {
                 log::error!("Failed to apply virtual_protect patch: {}", e);
             }
@@ -43,6 +40,9 @@ unsafe extern "system" fn h_load_library_w(lp_lib_file_name: PCWSTR) -> HMODULE 
             }
             if let Err(e) = unsafe { crate::patch::network::apply(&module_info) } {
                 log::error!("Failed to apply socket patches: {}", e);
+            }
+            if let Err(e) = unsafe { crate::patch::registry_hook::apply(&module_info) } {
+                log::error!("Failed to apply registry patches: {}", e);
             }
 
             // Apply queued hooks
