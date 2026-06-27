@@ -1,6 +1,6 @@
 use std::ffi::c_void;
-use windows::core::{GUID, HRESULT, Interface};
 use windows::Win32::Foundation::{E_NOINTERFACE, E_POINTER, S_OK};
+use windows::core::{GUID, HRESULT, Interface};
 
 use super::SharedSiteState;
 
@@ -13,7 +13,8 @@ pub const IID_IOLENAVIGATE: GUID = GUID::from_values(
 
 #[repr(C)]
 pub struct IOleNavigateVtbl {
-    pub QueryInterface: unsafe extern "system" fn(*mut c_void, *const GUID, *mut *mut c_void) -> HRESULT,
+    pub QueryInterface:
+        unsafe extern "system" fn(*mut c_void, *const GUID, *mut *mut c_void) -> HRESULT,
     pub AddRef: unsafe extern "system" fn(*mut c_void) -> u32,
     pub Release: unsafe extern "system" fn(*mut c_void) -> u32,
     pub OnNavigate: unsafe extern "system" fn(
@@ -96,16 +97,27 @@ unsafe extern "system" fn on_navigate(
     } else {
         "None".to_string()
     };
-    
+
     let target_frame_str = if !target_frame.is_null() {
-        unsafe { std::ffi::CStr::from_ptr(target_frame).to_string_lossy().into_owned() }
+        unsafe {
+            std::ffi::CStr::from_ptr(target_frame)
+                .to_string_lossy()
+                .into_owned()
+        }
     } else {
         "None".to_string()
     };
 
     log::info!(
         "[IOleNavigate::OnNavigate] URL: {}, Flags: {}, Target Frame: {}, args: [{}, {}, {}, {}, {}]",
-        url_str, flags, target_frame_str, arg5, arg6, arg7, arg8, arg9
+        url_str,
+        flags,
+        target_frame_str,
+        arg5,
+        arg6,
+        arg7,
+        arg8,
+        arg9
     );
     S_OK
 }

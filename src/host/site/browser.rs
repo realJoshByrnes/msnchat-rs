@@ -1,6 +1,6 @@
 use std::ffi::c_void;
-use windows::core::{GUID, HRESULT, Interface};
 use windows::Win32::Foundation::{E_NOINTERFACE, E_NOTIMPL, E_POINTER, S_OK};
+use windows::core::{GUID, HRESULT, Interface};
 
 use super::SharedSiteState;
 
@@ -13,26 +13,44 @@ pub const IID_IWEBBROWSER2: GUID = GUID::from_values(
 
 #[repr(C)]
 pub struct IWebBrowser2Vtbl {
-    pub QueryInterface: unsafe extern "system" fn(*mut c_void, *const GUID, *mut *mut c_void) -> HRESULT,
+    pub QueryInterface:
+        unsafe extern "system" fn(*mut c_void, *const GUID, *mut *mut c_void) -> HRESULT,
     pub AddRef: unsafe extern "system" fn(*mut c_void) -> u32,
     pub Release: unsafe extern "system" fn(*mut c_void) -> u32,
-    
+
     // IDispatch methods (Index 3-6)
     pub GetTypeInfoCount: unsafe extern "system" fn(*mut c_void, *mut u32) -> HRESULT,
     pub GetTypeInfo: unsafe extern "system" fn(*mut c_void, u32, u32, *mut *mut c_void) -> HRESULT,
-    pub GetIDsOfNames: unsafe extern "system" fn(*mut c_void, *const GUID, *mut *mut u8, u32, u32, *mut i32) -> HRESULT,
-    pub Invoke: unsafe extern "system" fn(*mut c_void, i32, *const GUID, u32, u16, *mut c_void, *mut c_void, *mut c_void, *mut u32) -> HRESULT,
-    
+    pub GetIDsOfNames: unsafe extern "system" fn(
+        *mut c_void,
+        *const GUID,
+        *mut *mut u8,
+        u32,
+        u32,
+        *mut i32,
+    ) -> HRESULT,
+    pub Invoke: unsafe extern "system" fn(
+        *mut c_void,
+        i32,
+        *const GUID,
+        u32,
+        u16,
+        *mut c_void,
+        *mut c_void,
+        *mut c_void,
+        *mut u32,
+    ) -> HRESULT,
+
     // IWebBrowser methods (Index 7-10)
     pub GoBack: unsafe extern "system" fn(*mut c_void) -> HRESULT,
     pub GoForward: unsafe extern "system" fn(*mut c_void) -> HRESULT,
     pub GoHome: unsafe extern "system" fn(*mut c_void) -> HRESULT,
     pub GoSearch: unsafe extern "system" fn(*mut c_void) -> HRESULT,
-    
+
     // Navigate (Index 11 / offset 0x2C)
     pub Navigate: unsafe extern "system" fn(
         *mut c_void,
-        *const u16, // BSTR URL representation
+        *const u16,  // BSTR URL representation
         *mut c_void, // VARIANT* Flags
         *mut c_void, // VARIANT* TargetFrameName
         *mut c_void, // VARIANT* PostData
@@ -131,19 +149,44 @@ unsafe extern "system" fn dummy_method(_this: *mut c_void) -> HRESULT {
     E_NOTIMPL
 }
 
-unsafe extern "system" fn dummy_get_type_info_count(_this: *mut c_void, _count: *mut u32) -> HRESULT {
+unsafe extern "system" fn dummy_get_type_info_count(
+    _this: *mut c_void,
+    _count: *mut u32,
+) -> HRESULT {
     E_NOTIMPL
 }
 
-unsafe extern "system" fn dummy_get_type_info(_this: *mut c_void, _i: u32, _lcid: u32, _pp: *mut *mut c_void) -> HRESULT {
+unsafe extern "system" fn dummy_get_type_info(
+    _this: *mut c_void,
+    _i: u32,
+    _lcid: u32,
+    _pp: *mut *mut c_void,
+) -> HRESULT {
     E_NOTIMPL
 }
 
-unsafe extern "system" fn dummy_get_ids_of_names(_this: *mut c_void, _riid: *const GUID, _names: *mut *mut u8, _cnames: u32, _lcid: u32, _dispid: *mut i32) -> HRESULT {
+unsafe extern "system" fn dummy_get_ids_of_names(
+    _this: *mut c_void,
+    _riid: *const GUID,
+    _names: *mut *mut u8,
+    _cnames: u32,
+    _lcid: u32,
+    _dispid: *mut i32,
+) -> HRESULT {
     E_NOTIMPL
 }
 
-unsafe extern "system" fn dummy_invoke(_this: *mut c_void, _dispid: i32, _riid: *const GUID, _lcid: u32, _flags: u16, _params: *mut c_void, _result: *mut c_void, _excep: *mut c_void, _argerr: *mut u32) -> HRESULT {
+unsafe extern "system" fn dummy_invoke(
+    _this: *mut c_void,
+    _dispid: i32,
+    _riid: *const GUID,
+    _lcid: u32,
+    _flags: u16,
+    _params: *mut c_void,
+    _result: *mut c_void,
+    _excep: *mut c_void,
+    _argerr: *mut u32,
+) -> HRESULT {
     E_NOTIMPL
 }
 
@@ -156,7 +199,7 @@ unsafe extern "system" fn navigate(
     headers: *mut c_void,
 ) -> HRESULT {
     let _ = this;
-    
+
     let url_str = if url.is_null() {
         "None".to_string()
     } else {
@@ -174,9 +217,13 @@ unsafe extern "system" fn navigate(
 
     log::info!(
         "[IWebBrowser2::Navigate] URL: {}, Flags: {}, TargetFrame: {}, PostData: {}, Headers: {}",
-        url_str, flags_str, target_frame_str, post_data_str, headers_str
+        url_str,
+        flags_str,
+        target_frame_str,
+        post_data_str,
+        headers_str
     );
-    
+
     S_OK
 }
 

@@ -1,3 +1,7 @@
+#![allow(non_snake_case)]
+#![allow(clippy::missing_safety_doc)]
+#![allow(unused_unsafe)]
+
 use windows::Win32::System::Ole::OleInitialize;
 use windows::core::{GUID, Result};
 

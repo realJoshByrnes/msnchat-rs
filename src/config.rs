@@ -1,8 +1,7 @@
-use std::collections::HashMap;
+use serde::{Deserialize, Serialize};
 use std::fs::{self, File};
 use std::io::{self, Read};
 use std::path::{Path, PathBuf};
-use serde::{Serialize, Deserialize};
 use uuid::Uuid;
 
 #[derive(Serialize, Deserialize, Default, Debug, Clone)]
@@ -59,15 +58,14 @@ impl MSNConfigManager {
         let mut file = File::open(&self.config_path)?;
         let mut contents = String::new();
         file.read_to_string(&mut contents)?;
-        
-        toml::from_str(&contents)
-            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
+
+        toml::from_str(&contents).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
     }
 
     /// Save configuration back to config.toml
     pub fn save(&self, config: &MSNConfig) -> io::Result<()> {
-        let serialized = toml::to_string(config)
-            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+        let serialized =
+            toml::to_string(config).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
         fs::write(&self.config_path, serialized)
     }
 
@@ -80,9 +78,9 @@ impl MSNConfigManager {
             .as_secs() as u32;
         let day_seconds = 24 * 3600;
 
-        let token_expired = config.session.token.is_empty() 
-            || config.session.token.len() < 10 
-            || config.session.last_rotated == 0 
+        let token_expired = config.session.token.is_empty()
+            || config.session.token.len() < 10
+            || config.session.last_rotated == 0
             || (now - config.session.last_rotated) >= day_seconds;
 
         if token_expired {
@@ -123,11 +121,11 @@ impl MSNConfigManager {
     //     let mut config = self.load()?;
     //     config.sounds.enabled = true;
     //     config.sounds.media_dir = media_dir.to_path_buf();
-    //     
+    //
     //     for &(event_id, wav_name) in sound_events {
     //         config.sounds.events.insert(event_id.to_string(), wav_name.to_string());
     //     }
-    //     
+    //
     //     self.save(&config)
     // }
 }

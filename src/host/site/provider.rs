@@ -1,6 +1,6 @@
 use std::ffi::c_void;
-use windows::core::{GUID, HRESULT, Interface};
 use windows::Win32::Foundation::{E_NOINTERFACE, E_POINTER, S_OK};
+use windows::core::{GUID, HRESULT, Interface};
 
 use super::SharedSiteState;
 
@@ -13,7 +13,8 @@ pub const IID_ISERVICEPROVIDER: GUID = GUID::from_values(
 
 #[repr(C)]
 pub struct IServiceProviderVtbl {
-    pub QueryInterface: unsafe extern "system" fn(*mut c_void, *const GUID, *mut *mut c_void) -> HRESULT,
+    pub QueryInterface:
+        unsafe extern "system" fn(*mut c_void, *const GUID, *mut *mut c_void) -> HRESULT,
     pub AddRef: unsafe extern "system" fn(*mut c_void) -> u32,
     pub Release: unsafe extern "system" fn(*mut c_void) -> u32,
     pub QueryService: unsafe extern "system" fn(
@@ -101,7 +102,11 @@ unsafe extern "system" fn query_service(
         if guid_service == &sid_web_browser_app {
             let browser = (*shared).browser;
             // Delegate query interface to browser wrapper
-            return ((*(*browser).lp_vtbl).QueryInterface)(browser as *mut c_void, riid, ppv_object);
+            return ((*(*browser).lp_vtbl).QueryInterface)(
+                browser as *mut c_void,
+                riid,
+                ppv_object,
+            );
         }
 
         *ppv_object = std::ptr::null_mut();

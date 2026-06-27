@@ -108,13 +108,15 @@ impl OcxHost {
             self.ole_object.SetClientSite(&client_site)?;
 
             // Query connection point container and advise our event sink
-            if let Ok(cpc) = self.ole_object.cast::<windows::Win32::System::Com::IConnectionPointContainer>() {
-                if let Ok(cp) = cpc.FindConnectionPoint(&super::site::events::IID_ICCHATFRAMEEVENTS) {
-                    let events_raw = self.wrappers.events as *mut std::ffi::c_void;
-                    super::site::events::add_ref(events_raw);
-                    let events_unk = IUnknown::from_raw(events_raw);
-                    let _cookie = cp.Advise(&events_unk);
-                }
+            if let Ok(cpc) = self
+                .ole_object
+                .cast::<windows::Win32::System::Com::IConnectionPointContainer>()
+                && let Ok(cp) = cpc.FindConnectionPoint(&super::site::events::IID_ICCHATFRAMEEVENTS)
+            {
+                let events_raw = self.wrappers.events as *mut std::ffi::c_void;
+                super::site::events::add_ref(events_raw);
+                let events_unk = IUnknown::from_raw(events_raw);
+                let _cookie = cp.Advise(&events_unk);
             }
 
             let mut rect = RECT::default();

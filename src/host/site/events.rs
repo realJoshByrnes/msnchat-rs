@@ -1,6 +1,6 @@
 use std::ffi::c_void;
-use windows::core::{GUID, HRESULT, Interface};
 use windows::Win32::Foundation::{E_NOINTERFACE, E_POINTER, S_OK};
+use windows::core::{GUID, HRESULT, Interface};
 
 use super::SharedSiteState;
 
@@ -13,10 +13,14 @@ pub const IID_ICCHATFRAMEEVENTS: GUID = GUID::from_values(
 
 #[repr(C)]
 pub struct ICChatFrameEventsVtbl {
-    pub QueryInterface: unsafe extern "system" fn(*mut c_void, *const GUID, *mut *mut c_void) -> HRESULT,
+    pub QueryInterface:
+        unsafe extern "system" fn(*mut c_void, *const GUID, *mut *mut c_void) -> HRESULT,
     pub AddRef: unsafe extern "system" fn(*mut c_void) -> u32,
     pub Release: unsafe extern "system" fn(*mut c_void) -> u32,
-    pub OnRedirect: unsafe extern "system" fn(*mut c_void, std::mem::ManuallyDrop<windows::core::BSTR>) -> HRESULT,
+    pub OnRedirect: unsafe extern "system" fn(
+        *mut c_void,
+        std::mem::ManuallyDrop<windows::core::BSTR>,
+    ) -> HRESULT,
 }
 
 #[repr(C)]
@@ -69,9 +73,15 @@ pub unsafe extern "system" fn release(this: *mut c_void) -> u32 {
     }
 }
 
-unsafe extern "system" fn on_redirect(this: *mut c_void, str_url: std::mem::ManuallyDrop<windows::core::BSTR>) -> HRESULT {
+unsafe extern "system" fn on_redirect(
+    this: *mut c_void,
+    str_url: std::mem::ManuallyDrop<windows::core::BSTR>,
+) -> HRESULT {
     let _ = this;
-    log::info!("[_ICChatFrameEvents] OnRedirect triggered! Redirecting to: {}", *str_url);
+    log::info!(
+        "[_ICChatFrameEvents] OnRedirect triggered! Redirecting to: {}",
+        *str_url
+    );
     S_OK
 }
 

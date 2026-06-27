@@ -4,12 +4,12 @@ use client::MyOleClientSite;
 use frame::MyOleInPlaceFrame;
 use inplace::MyOleInPlaceSite;
 
+pub mod browser;
 pub mod client;
 pub mod events;
 pub mod frame;
 pub mod inplace;
 pub mod navigate;
-pub mod browser;
 pub mod provider;
 
 #[repr(C)]
