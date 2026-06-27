@@ -43,6 +43,24 @@ fn main() -> Result<()> {
 
     let dll_bytes = &OCX_BYTES.0;
 
+    // Write OCX to temp directory to load and register TypeLib
+    let temp_ocx_path = std::env::temp_dir().join("MsnChat45.ocx");
+    if !temp_ocx_path.exists() {
+        std::fs::write(&temp_ocx_path, dll_bytes).map_err(|e| {
+            windows::core::Error::new(
+                windows::core::HRESULT(0x80004005u32 as i32),
+                format!("Failed to write OCX: {}", e),
+            )
+        })?;
+    }
+
+    let path_hstring = windows::core::HSTRING::from(temp_ocx_path.to_string_lossy().as_ref());
+    let pcwstr = windows::core::PCWSTR::from_raw(path_hstring.as_ptr());
+    unsafe {
+        let typelib = windows::Win32::System::Ole::LoadTypeLib(pcwstr)?;
+        windows::Win32::System::Ole::RegisterTypeLibForUser(&typelib, pcwstr, None)?;
+    }
+
     let manual_module =
         std::sync::Arc::new(unsafe { patch::pe::ManualModule::load(dll_bytes) }.unwrap());
 

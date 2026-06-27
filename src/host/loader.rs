@@ -144,98 +144,112 @@ impl OcxHost {
     }
 
     pub fn put_property(&self, name: &str, value: &str) -> Result<()> {
-        unsafe {
-            use windows::Win32::System::Com::{DISPATCH_PROPERTYPUT, DISPPARAMS, EXCEPINFO};
-            use windows::Win32::System::Ole::DISPID_PROPERTYPUT;
-            use windows::Win32::System::Variant::{VARIANT, VARIANT_0_0, VT_BSTR};
-            use windows::core::BSTR;
+        let dispatch = self.dispatch()?;
+        let this_ptr = windows::core::Interface::as_raw(&dispatch);
 
-            let dispatch = self.dispatch()?;
-
-            let dispid = match name {
-                "BackColor" => -501,
-                "ForeColor" => -513,
-                "RoomName" => 2,
-                "HexRoomName" => 3,
-                "NickName" => 4,
-                "Server" => 5,
-                "BackHighlightColor" => 6,
-                "ButtonFrameColor" => 7,
-                "TopBackHighlightColor" => 8,
-                "ChatMode" => 9,
-                "URLBack" => 10,
-                "Category" => 11,
-                "Topic" => 12,
-                "WelcomeMsg" => 13,
-                "BaseURL" => 15,
-                "InputBorderColor" => 16,
-                "CreateRoom" => 17,
-                "ChatHome" => 19,
-                "Locale" => 20,
-                "ResDLL" => 21,
-                "ButtonTextColor" => 22,
-                "ButtonBackColor" => 23,
-                "PassportTicket" => 24,
-                "PassportProfile" => 25,
-                "Feature" => 26,
-                "MessageOfTheDay" => 27,
-                "ChannelLanguage" => 28,
-                "InvitationCode" => 29,
-                "NicknameToInvite" => 30,
-                "MSNREGCookie" => 31,
-                "CreationModes" => 32,
-                "MSNProfile" => 33,
-                "Market" => 34,
-                "WhisperContent" => 35,
-                "UserRole" => 36,
-                "AuditMessage" => 37,
-                "SubscriberInfo" => 38,
-                "UpsellURL" => 39,
-                _ => {
-                    log::error!("Unknown property name: {}", name);
-                    return Err(windows::core::Error::from_hresult(windows::core::HRESULT(
-                        E_FAIL.0,
-                    )));
-                }
-            };
-
-            let bstr_val = BSTR::from(value);
-            let mut variant = VARIANT::default();
-
-            let ptr = &mut variant as *mut VARIANT as *mut VARIANT_0_0;
-            (*ptr).vt = VT_BSTR;
-            (*ptr).Anonymous.bstrVal = std::mem::ManuallyDrop::new(bstr_val);
-
-            let mut prop_put_dispid = DISPID_PROPERTYPUT;
-
-            let dispparams = DISPPARAMS {
-                rgvarg: &mut variant,
-                rgdispidNamedArgs: &mut prop_put_dispid,
-                cArgs: 1,
-                cNamedArgs: 1,
-            };
-
-            let mut excepinfo = EXCEPINFO::default();
-            let mut argerr = 0;
-
-            let hr_invoke = dispatch.Invoke(
-                dispid,
-                &GUID::default(),
-                0, // LCID
-                DISPATCH_PROPERTYPUT,
-                &dispparams,
-                None,
-                Some(&mut excepinfo),
-                Some(&mut argerr),
-            );
-
-            if hr_invoke.is_err() {
-                println!("Invoke failed for {}: {:?}", name, hr_invoke);
+        // Detect if this is IChatSettings or IChatFrame
+        let settings_guid = windows::core::GUID::from_values(
+            0xD5EF4299,
+            0x12F1,
+            0x474D,
+            [0x98, 0xC5, 0x3C, 0x65, 0x8F, 0xD2, 0xE3, 0x43],
+        );
+        let mut settings_ptr: *mut std::ffi::c_void = std::ptr::null_mut();
+        let is_settings = unsafe { dispatch.query(&settings_guid, &mut settings_ptr).is_ok() };
+        if is_settings && !settings_ptr.is_null() {
+            unsafe {
+                let _ = windows::core::IUnknown::from_raw(settings_ptr);
             }
+        }
 
-            let _ = windows::Win32::System::Variant::VariantClear(&mut variant);
+        unsafe {
+            let vtable = *(this_ptr as *const *const *const std::ffi::c_void);
 
-            hr_invoke
+            let call_put_bstr = |index: usize, val: &str| -> Result<()> {
+                let func_ptr = *vtable.add(index);
+                let func: unsafe extern "system" fn(*mut std::ffi::c_void, windows::core::BSTR) -> windows::core::HRESULT =
+                    std::mem::transmute(func_ptr);
+                let bstr = windows::core::BSTR::from(val);
+                let hr = func(this_ptr, bstr);
+                hr.ok()
+            };
+
+            let call_put_i32 = |index: usize, val: i32| -> Result<()> {
+                let func_ptr = *vtable.add(index);
+                let func: unsafe extern "system" fn(*mut std::ffi::c_void, i32) -> windows::core::HRESULT =
+                    std::mem::transmute(func_ptr);
+                let hr = func(this_ptr, val);
+                hr.ok()
+            };
+
+            let call_put_u32 = |index: usize, val: u32| -> Result<()> {
+                let func_ptr = *vtable.add(index);
+                let func: unsafe extern "system" fn(*mut std::ffi::c_void, u32) -> windows::core::HRESULT =
+                    std::mem::transmute(func_ptr);
+                let hr = func(this_ptr, val);
+                hr.ok()
+            };
+
+            if is_settings {
+                match name {
+                    "BackColor" => call_put_u32(7, value.parse().unwrap_or(0)),
+                    "ForeColor" => call_put_u32(9, value.parse().unwrap_or(0)),
+                    "RedirectURL" => call_put_bstr(11, value),
+                    "ResDLL" => call_put_bstr(13, value),
+                    _ => {
+                        log::error!("Unknown IChatSettings property name: {}", name);
+                        Err(windows::core::Error::from_hresult(windows::core::HRESULT(
+                            windows::Win32::Foundation::E_FAIL.0,
+                        )))
+                    }
+                }
+            } else {
+                match name {
+                    "BackColor" => call_put_u32(7, value.parse().unwrap_or(0)),
+                    "RoomName" => call_put_bstr(10, value),
+                    "HexRoomName" => call_put_bstr(12, value),
+                    "NickName" => call_put_bstr(14, value),
+                    "Server" => call_put_bstr(16, value),
+                    "BackHighlightColor" => call_put_u32(18, value.parse().unwrap_or(0)),
+                    "ButtonFrameColor" => call_put_u32(20, value.parse().unwrap_or(0)),
+                    "TopBackHighlightColor" => call_put_u32(22, value.parse().unwrap_or(0)),
+                    "ChatMode" => call_put_i32(24, value.parse().unwrap_or(0)),
+                    "URLBack" => call_put_bstr(26, value),
+                    "Category" => call_put_bstr(28, value),
+                    "Topic" => call_put_bstr(30, value),
+                    "WelcomeMsg" => call_put_bstr(32, value),
+                    "BaseURL" => call_put_bstr(34, value),
+                    "InputBorderColor" => call_put_u32(36, value.parse().unwrap_or(0)),
+                    "CreateRoom" => call_put_bstr(38, value),
+                    "ChatHome" => call_put_bstr(40, value),
+                    "Locale" => call_put_bstr(42, value),
+                    "ResDLL" => call_put_bstr(44, value),
+                    "ButtonTextColor" => call_put_u32(46, value.parse().unwrap_or(0)),
+                    "ButtonBackColor" => call_put_u32(48, value.parse().unwrap_or(0)),
+                    "PassportTicket" => call_put_bstr(50, value),
+                    "PassportProfile" => call_put_bstr(52, value),
+                    "Feature" => call_put_u32(54, value.parse().unwrap_or(0)),
+                    "MessageOfTheDay" => call_put_bstr(56, value),
+                    "ChannelLanguage" => call_put_bstr(58, value),
+                    "InvitationCode" => call_put_bstr(60, value),
+                    "NicknameToInvite" => call_put_bstr(62, value),
+                    "MSNREGCookie" => call_put_bstr(64, value),
+                    "CreationModes" => call_put_bstr(66, value),
+                    "MSNProfile" => call_put_bstr(68, value),
+                    "Market" => call_put_bstr(70, value),
+                    "WhisperContent" => call_put_bstr(72, value),
+                    "UserRole" => call_put_bstr(74, value),
+                    "AuditMessage" => call_put_bstr(76, value),
+                    "SubscriberInfo" => call_put_bstr(78, value),
+                    "UpsellURL" => call_put_bstr(80, value),
+                    _ => {
+                        log::error!("Unknown IChatFrame property name: {}", name);
+                        Err(windows::core::Error::from_hresult(windows::core::HRESULT(
+                            windows::Win32::Foundation::E_FAIL.0,
+                        )))
+                    }
+                }
+            }
         }
     }
 }
