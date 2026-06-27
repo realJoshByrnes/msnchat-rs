@@ -380,6 +380,22 @@ unsafe extern "system" fn detour_reg_query_value_ex_a(
                             }
                         }
                         return 0;
+                    } else if let Some((value_type, data_bytes)) = config.settings.get_value(val_name) {
+                        if !lp_type.is_null() {
+                            unsafe { *lp_type = value_type };
+                        }
+                        if !lpcb_data.is_null() {
+                            let max_len = unsafe { *lpcb_data } as usize;
+                            unsafe { *lpcb_data = data_bytes.len() as u32 };
+                            if !lp_data.is_null() && max_len >= data_bytes.len() {
+                                unsafe {
+                                    std::ptr::copy_nonoverlapping(data_bytes.as_ptr(), lp_data, data_bytes.len());
+                                }
+                            }
+                        }
+                        return 0; // Success
+                    } else {
+                        return 2; // ERROR_FILE_NOT_FOUND
                     }
                 }
             }
@@ -610,6 +626,12 @@ unsafe extern "system" fn detour_reg_set_value_ex_a(
                     let ts = unsafe { *(lp_data as *const u32) };
                     config.session.last_rotated = ts;
                     let _ = manager.save(&config);
+                    return 0;
+                } else {
+                    let bytes = unsafe { std::slice::from_raw_parts(lp_data, cb_data as usize) };
+                    if config.settings.set_value(val_name, _dw_type, bytes) {
+                        let _ = manager.save(&config);
+                    }
                     return 0;
                 }
             }
