@@ -14,11 +14,64 @@ use windows::{
 
 use crate::host::OcxHost;
 
+/// The 16 MSN Chat palette colors stored as COLORREF (0x00BBGGRR) for Win32 APIs.
+const MSN_COLORS: [u32; 16] = [
+    0x00000000, // 0  Black    #000000
+    0x00FFFFFF, // 1  White    #FFFFFF
+    0x00000080, // 2  Maroon   #800000
+    0x00008000, // 3  Green    #008000
+    0x00800000, // 4  Navy     #000080
+    0x00008080, // 5  Olive    #808000
+    0x00800080, // 6  Purple   #800080
+    0x00808000, // 7  Teal     #008080
+    0x00C0C0C0, // 8  Silver   #C0C0C0
+    0x00808080, // 9  Gray     #808080
+    0x000000FF, // 10 Red      #FF0000
+    0x0000FF00, // 11 Lime     #00FF00
+    0x00FF0000, // 12 Blue     #0000FF
+    0x0000FFFF, // 13 Yellow   #FFFF00
+    0x00FF00FF, // 14 Fuchsia  #FF00FF
+    0x00FFFF00, // 15 Aqua     #00FFFF
+];
+
+unsafe fn send_message_w(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
+    unsafe {
+        windows::Win32::UI::WindowsAndMessaging::SendMessageW(hwnd, msg, Some(wparam), Some(lparam))
+    }
+}
+
+
+
+unsafe extern "system" fn enum_font_fam_ex_proc(
+    lpelfe: *const windows::Win32::Graphics::Gdi::LOGFONTW,
+    _lpntme: *const windows::Win32::Graphics::Gdi::TEXTMETRICW,
+    _fonttype: u32,
+    lparam: LPARAM,
+) -> i32 {
+    unsafe {
+        let list = &mut *(lparam.0 as *mut Vec<String>);
+        let font_name = String::from_utf16_lossy(&(*lpelfe).lfFaceName);
+        let font_name = font_name.trim_end_matches('\0').to_string();
+        if !font_name.is_empty() && !list.contains(&font_name) && !font_name.starts_with('@') {
+            list.push(font_name);
+        }
+        1
+    }
+}
+
 pub struct OcxWindow {
     hwnd: HWND,
     host: Option<OcxHost>,
     parent: Option<HWND>,
     module: Option<std::sync::Arc<crate::patch::pe::ManualModule>>,
+    rebar_hwnd: Option<HWND>,
+    cb_font: Option<HWND>,
+    cb_charset: Option<HWND>,
+    btn_color: Option<HWND>,
+        btn_bold: Option<HWND>,
+    btn_italic: Option<HWND>,
+    hfont_bold: Option<windows::Win32::Graphics::Gdi::HFONT>,
+    hfont_italic: Option<windows::Win32::Graphics::Gdi::HFONT>,
 }
 
 impl OcxWindow {
@@ -74,11 +127,411 @@ impl OcxWindow {
             SetMenu(hwnd, Some(hmenu))?;
         }
 
-        Ok(Self {
+        // Ensure common controls are initialized (needed for Rebar)
+        unsafe {
+            let icc = windows::Win32::UI::Controls::INITCOMMONCONTROLSEX {
+                dwSize: std::mem::size_of::<windows::Win32::UI::Controls::INITCOMMONCONTROLSEX>()
+                    as u32,
+                dwICC: windows::Win32::UI::Controls::ICC_COOL_CLASSES
+                    | windows::Win32::UI::Controls::ICC_BAR_CLASSES,
+            };
+            let _ = windows::Win32::UI::Controls::InitCommonControlsEx(&icc);
+        }
+
+        // Create child controls for toolbar, hosted inside a rebar
+        let (rebar_hwnd, cb_font, cb_charset, btn_color, btn_bold, btn_italic, hfont_bold, hfont_italic) = unsafe {
+            // Create the rebar control
+                        let rebar = CreateWindowExW(
+                windows::Win32::UI::WindowsAndMessaging::WINDOW_EX_STYLE::default(),
+                w!("ReBarWindow32"),
+                None,
+                windows::Win32::UI::WindowsAndMessaging::WINDOW_STYLE(
+                    windows::Win32::UI::WindowsAndMessaging::WS_CHILD.0
+                        | windows::Win32::UI::WindowsAndMessaging::WS_VISIBLE.0
+                        | windows::Win32::UI::WindowsAndMessaging::WS_CLIPSIBLINGS.0
+                        | windows::Win32::UI::WindowsAndMessaging::WS_CLIPCHILDREN.0
+                        | windows::Win32::UI::Controls::CCS_NODIVIDER as u32
+                        | windows::Win32::UI::Controls::RBS_VARHEIGHT
+                        | windows::Win32::UI::Controls::RBS_BANDBORDERS,
+                ),
+                0,
+                0,
+                0,
+                0,
+                Some(hwnd),
+                None,
+                Some(instance.into()),
+                None,
+            )?;
+
+            // Create a toolbar to host the font controls
+            let toolbar = CreateWindowExW(
+                windows::Win32::UI::WindowsAndMessaging::WINDOW_EX_STYLE::default(),
+                w!("ToolbarWindow32"),
+                None,
+                windows::Win32::UI::WindowsAndMessaging::WINDOW_STYLE(
+                    windows::Win32::UI::WindowsAndMessaging::WS_CHILD.0
+                        | windows::Win32::UI::WindowsAndMessaging::WS_VISIBLE.0
+                        | windows::Win32::UI::Controls::CCS_NODIVIDER as u32
+                        | windows::Win32::UI::Controls::TBSTYLE_FLAT,
+                ),
+                0,
+                0,
+                0,
+                0,
+                Some(hwnd),
+                None,
+                Some(instance.into()),
+                None,
+            )?;
+            let _ = send_message_w(
+                toolbar,
+                windows::Win32::UI::Controls::TB_BUTTONSTRUCTSIZE,
+                WPARAM(
+                    std::mem::size_of::<windows::Win32::UI::Controls::TBBUTTON>() as usize,
+                ),
+                LPARAM(0),
+            );
+
+            let cb_font = CreateWindowExW(
+                windows::Win32::UI::WindowsAndMessaging::WINDOW_EX_STYLE::default(),
+                w!("COMBOBOX"),
+                None,
+                windows::Win32::UI::WindowsAndMessaging::WINDOW_STYLE(
+                    windows::Win32::UI::WindowsAndMessaging::WS_CHILD.0
+                        | windows::Win32::UI::WindowsAndMessaging::WS_VISIBLE.0
+                        | windows::Win32::UI::WindowsAndMessaging::CBS_DROPDOWNLIST as u32
+                        | windows::Win32::UI::WindowsAndMessaging::CBS_OWNERDRAWFIXED as u32
+                        | windows::Win32::UI::WindowsAndMessaging::CBS_HASSTRINGS as u32
+                        | windows::Win32::UI::WindowsAndMessaging::WS_VSCROLL.0
+                        | windows::Win32::UI::WindowsAndMessaging::WS_TABSTOP.0,
+                ),
+                                5, 2, 150, 200, // Positioned on toolbar
+                Some(toolbar),
+                Some(windows::Win32::UI::WindowsAndMessaging::HMENU(
+                    2001 as *mut std::ffi::c_void,
+                )),
+                Some(instance.into()),
+                None,
+            )?;
+
+            let cb_charset = CreateWindowExW(
+                windows::Win32::UI::WindowsAndMessaging::WINDOW_EX_STYLE::default(),
+                w!("COMBOBOX"),
+                None,
+                windows::Win32::UI::WindowsAndMessaging::WINDOW_STYLE(
+                    windows::Win32::UI::WindowsAndMessaging::WS_CHILD.0
+                        | windows::Win32::UI::WindowsAndMessaging::WS_VISIBLE.0
+                        | windows::Win32::UI::WindowsAndMessaging::CBS_DROPDOWNLIST as u32
+                        | windows::Win32::UI::WindowsAndMessaging::WS_TABSTOP.0,
+                ),
+                                160, 2, 120, 200, // Positioned on toolbar
+                Some(toolbar),
+                Some(windows::Win32::UI::WindowsAndMessaging::HMENU(
+                    2002 as *mut std::ffi::c_void,
+                )),
+                Some(instance.into()),
+                None,
+            )?;
+
+            let btn_color = CreateWindowExW(
+                windows::Win32::UI::WindowsAndMessaging::WINDOW_EX_STYLE::default(),
+                w!("BUTTON"),
+                None,
+                windows::Win32::UI::WindowsAndMessaging::WINDOW_STYLE(
+                    windows::Win32::UI::WindowsAndMessaging::WS_CHILD.0
+                        | windows::Win32::UI::WindowsAndMessaging::WS_VISIBLE.0
+                        | windows::Win32::UI::WindowsAndMessaging::BS_OWNERDRAW as u32,
+                ),
+                                285, 2, 26, 22, // Positioned on toolbar
+                Some(toolbar),
+                Some(windows::Win32::UI::WindowsAndMessaging::HMENU(
+                    2005 as *mut std::ffi::c_void,
+                )),
+                Some(instance.into()),
+                None,
+            )?;
+
+            let btn_bold = CreateWindowExW(
+                windows::Win32::UI::WindowsAndMessaging::WINDOW_EX_STYLE::default(),
+                w!("BUTTON"),
+                                w!("B"),
+                windows::Win32::UI::WindowsAndMessaging::WINDOW_STYLE(
+                    windows::Win32::UI::WindowsAndMessaging::WS_CHILD.0
+                        | windows::Win32::UI::WindowsAndMessaging::WS_VISIBLE.0
+                        | windows::Win32::UI::WindowsAndMessaging::BS_AUTOCHECKBOX as u32
+                        | windows::Win32::UI::WindowsAndMessaging::BS_PUSHLIKE as u32,
+                ),
+                316, 2, 26, 22, // Positioned on toolbar
+                Some(toolbar),
+                Some(windows::Win32::UI::WindowsAndMessaging::HMENU(
+                    2003 as *mut std::ffi::c_void,
+                )),
+                Some(instance.into()),
+                None,
+            )?;
+
+            let btn_italic = CreateWindowExW(
+                windows::Win32::UI::WindowsAndMessaging::WINDOW_EX_STYLE::default(),
+                w!("BUTTON"),
+                                w!("I"),
+                windows::Win32::UI::WindowsAndMessaging::WINDOW_STYLE(
+                    windows::Win32::UI::WindowsAndMessaging::WS_CHILD.0
+                        | windows::Win32::UI::WindowsAndMessaging::WS_VISIBLE.0
+                        | windows::Win32::UI::WindowsAndMessaging::BS_AUTOCHECKBOX as u32
+                        | windows::Win32::UI::WindowsAndMessaging::BS_PUSHLIKE as u32,
+                ),
+                347, 2, 26, 22, // Positioned on toolbar
+                Some(toolbar),
+                Some(windows::Win32::UI::WindowsAndMessaging::HMENU(
+                    2004 as *mut std::ffi::c_void,
+                )),
+                Some(instance.into()),
+                None,
+            )?;
+
+            // Set GUI font
+            let gui_font = windows::Win32::Graphics::Gdi::GetStockObject(
+                windows::Win32::Graphics::Gdi::DEFAULT_GUI_FONT,
+            );
+            let _ = send_message_w(
+                cb_font,
+                windows::Win32::UI::WindowsAndMessaging::WM_SETFONT,
+                WPARAM(gui_font.0 as usize),
+                LPARAM(0),
+            );
+            let _ = send_message_w(
+                cb_charset,
+                windows::Win32::UI::WindowsAndMessaging::WM_SETFONT,
+                WPARAM(gui_font.0 as usize),
+                LPARAM(0),
+            );
+                        // Create bold and italic fonts for the style buttons
+            let mut lf: windows::Win32::Graphics::Gdi::LOGFONTW = std::mem::zeroed();
+            windows::Win32::Graphics::Gdi::GetObjectW(
+                gui_font,
+                std::mem::size_of::<windows::Win32::Graphics::Gdi::LOGFONTW>() as i32,
+                Some(&mut lf as *mut _ as *mut std::ffi::c_void),
+            );
+
+            let mut lf_bold = lf.clone();
+            lf_bold.lfWeight = windows::Win32::Graphics::Gdi::FW_BOLD.0 as i32;
+            let hfont_bold = windows::Win32::Graphics::Gdi::CreateFontIndirectW(&lf_bold);
+
+            let mut lf_italic = lf.clone();
+            lf_italic.lfItalic = 1; // TRUE
+            let hfont_italic = windows::Win32::Graphics::Gdi::CreateFontIndirectW(&lf_italic);
+
+            let _ = send_message_w(
+                btn_bold,
+                windows::Win32::UI::WindowsAndMessaging::WM_SETFONT,
+                WPARAM(hfont_bold.0 as usize),
+                LPARAM(1), // Redraw
+            );
+            let _ = send_message_w(
+                btn_italic,
+                windows::Win32::UI::WindowsAndMessaging::WM_SETFONT,
+                WPARAM(hfont_italic.0 as usize),
+                LPARAM(1), // Redraw
+            );
+
+            // Populate Fonts from OS
+            let mut font_names: Vec<String> = Vec::new();
+            let hdc = windows::Win32::Graphics::Gdi::GetDC(None);
+            let lf = windows::Win32::Graphics::Gdi::LOGFONTW {
+                lfCharSet: windows::Win32::Graphics::Gdi::DEFAULT_CHARSET,
+                ..Default::default()
+            };
+            let _ = windows::Win32::Graphics::Gdi::EnumFontFamiliesExW(
+                hdc,
+                &lf,
+                Some(enum_font_fam_ex_proc),
+                LPARAM(&mut font_names as *mut _ as isize),
+                0,
+            );
+            windows::Win32::Graphics::Gdi::ReleaseDC(None, hdc);
+            font_names.sort();
+
+            for name in font_names {
+                let f_wstr = windows::core::HSTRING::from(&name);
+                let _ = send_message_w(
+                    cb_font,
+                    windows::Win32::UI::WindowsAndMessaging::CB_ADDSTRING,
+                    WPARAM(0),
+                    LPARAM(f_wstr.as_ptr() as isize),
+                );
+            }
+
+            // Populate Charsets
+            let charsets = [
+                (w!("Western"), 0),
+                (w!("Default"), 1),
+                (w!("Symbol"), 2),
+                (w!("ShiftJIS"), 128),
+                (w!("Hangul"), 129),
+                (w!("GB2312"), 134),
+                (w!("Big5"), 136),
+                (w!("Greek"), 161),
+                (w!("Turkish"), 162),
+                (w!("Hebrew"), 177),
+                (w!("Arabic"), 178),
+                (w!("Baltic"), 186),
+                (w!("Russian"), 204),
+                (w!("Thai"), 222),
+                (w!("Eastern Europe"), 238),
+                (w!("OEM"), 255),
+            ];
+            for (name, val) in &charsets {
+                let idx = send_message_w(
+                    cb_charset,
+                    windows::Win32::UI::WindowsAndMessaging::CB_ADDSTRING,
+                    WPARAM(0),
+                    LPARAM(name.as_ptr() as isize),
+                )
+                .0 as usize;
+                let _ = send_message_w(
+                    cb_charset,
+                    windows::Win32::UI::WindowsAndMessaging::CB_SETITEMDATA,
+                    WPARAM(idx),
+                    LPARAM(*val as isize),
+                );
+            }
+
+            // (Color is now an owner-draw button, no population needed)
+
+            // Load from config
+            let manager = crate::config::MSNConfigManager::new(std::path::Path::new("config.toml"));
+            let config = manager.load().unwrap_or_default();
+
+            // Fontname config format: "<fontfamily>;<charset>"
+            let full_font_name = config
+                .settings
+                .fontname
+                .clone()
+                .unwrap_or_else(|| "Tahoma;0".to_string());
+            let parts: Vec<&str> = full_font_name.split(';').collect();
+            let font_family = parts.first().copied().unwrap_or("Tahoma");
+            let charset_val = parts
+                .get(1)
+                .and_then(|s| s.parse::<u32>().ok())
+                .unwrap_or(0);
+
+            let font_wstr = windows::core::HSTRING::from(font_family);
+            let idx = send_message_w(
+                cb_font,
+                windows::Win32::UI::WindowsAndMessaging::CB_FINDSTRINGEXACT,
+                WPARAM(usize::MAX),
+                LPARAM(font_wstr.as_ptr() as isize),
+            )
+            .0 as i32;
+            if idx >= 0 {
+                                let _ = send_message_w(
+                    cb_font,
+                    windows::Win32::UI::WindowsAndMessaging::CB_SETCURSEL,
+                    WPARAM(idx as usize),
+                    LPARAM(0),
+                );
+                let _ = windows::Win32::Graphics::Gdi::InvalidateRect(Some(cb_font), None, true);
+            }
+
+            let mut charset_idx = 0;
+            loop {
+                let val = send_message_w(
+                    cb_charset,
+                    windows::Win32::UI::WindowsAndMessaging::CB_GETITEMDATA,
+                    WPARAM(charset_idx),
+                    LPARAM(0),
+                )
+                .0 as i32;
+                if val == -1 {
+                    break;
+                }
+                if val == charset_val as i32 {
+                    let _ = send_message_w(
+                        cb_charset,
+                        windows::Win32::UI::WindowsAndMessaging::CB_SETCURSEL,
+                        WPARAM(charset_idx),
+                        LPARAM(0),
+                    );
+                    break;
+                }
+                charset_idx += 1;
+            }
+
+            let fontstyle = config.settings.fontstyle.unwrap_or(0);
+            let bold_checked = (fontstyle & 1) != 0;
+            let italic_checked = (fontstyle & 2) != 0;
+
+            let _ = send_message_w(
+                btn_bold,
+                windows::Win32::UI::WindowsAndMessaging::BM_SETCHECK,
+                WPARAM(if bold_checked { 1 } else { 0 }),
+                LPARAM(0),
+            );
+            let _ = send_message_w(
+                btn_italic,
+                windows::Win32::UI::WindowsAndMessaging::BM_SETCHECK,
+                WPARAM(if italic_checked { 1 } else { 0 }),
+                LPARAM(0),
+            );
+
+            // Invalidate the color button so it draws the initial color
+            let _ = windows::Win32::Graphics::Gdi::InvalidateRect(Some(btn_color), None, true);
+
+                        // Insert the toolbar as a single band into the rebar
+            let rbbi = windows::Win32::UI::Controls::REBARBANDINFOW {
+                cbSize: std::mem::size_of::<windows::Win32::UI::Controls::REBARBANDINFOW>() as u32,
+                fMask: windows::Win32::UI::Controls::RBBIM_STYLE
+                    | windows::Win32::UI::Controls::RBBIM_CHILD
+                    | windows::Win32::UI::Controls::RBBIM_CHILDSIZE
+                    | windows::Win32::UI::Controls::RBBIM_SIZE,
+                fStyle: windows::Win32::UI::Controls::RBBS_CHILDEDGE,
+                hwndChild: toolbar,
+                cxMinChild: 400, // Approx width of all controls
+                cyMinChild: 26,  // Approx height of controls
+                cx: 400,
+                ..Default::default()
+            };
+            let _ = send_message_w(
+                rebar,
+                windows::Win32::UI::Controls::RB_INSERTBANDW,
+                WPARAM(u32::MAX as usize),
+                LPARAM(&rbbi as *const _ as isize),
+            );
+
+            // Force the rebar to lay itself out to the parent's client width
+            {
+                let mut rc = RECT::default();
+                let _ = windows::Win32::UI::WindowsAndMessaging::GetClientRect(hwnd, &mut rc);
+                let lp = LPARAM(((rc.bottom as u32) << 16 | (rc.right as u32 & 0xFFFF)) as isize);
+                let _ = send_message_w(rebar, WM_SIZE, WPARAM(0), lp);
+            }
+
+                        (
+                Some(rebar),
+                Some(cb_font),
+                Some(cb_charset),
+                Some(btn_color),
+                Some(btn_bold),
+                Some(btn_italic),
+                hfont_bold,
+                hfont_italic,
+            )
+        };
+
+                Ok(Self {
             hwnd,
             host: None,
             parent: None,
             module: None,
+            rebar_hwnd,
+            cb_font,
+            cb_charset,
+            btn_color,
+            btn_bold,
+            btn_italic,
+            hfont_bold: Some(hfont_bold),
+            hfont_italic: Some(hfont_italic),
         })
     }
 
@@ -96,6 +549,51 @@ impl OcxWindow {
         setup(&mut host);
         host.attach(self.hwnd)?;
         self.host = Some(host);
+
+        // Immediately resize control to prevent it from covering the toolbar
+        if self.parent.is_none() {
+            unsafe {
+                let mut rect = RECT::default();
+                let _ =
+                    windows::Win32::UI::WindowsAndMessaging::GetClientRect(self.hwnd, &mut rect);
+                let rebar_h = self.rebar_hwnd.map(|r| send_message_w(r, windows::Win32::UI::Controls::RB_GETBARHEIGHT, WPARAM(0), LPARAM(0)).0 as i32).unwrap_or(32);
+                let toolbar_offset_rect = RECT {
+                    left: 0,
+                    top: rebar_h,
+                    right: rect.right,
+                    bottom: rect.bottom,
+                };
+                let host = self.host.as_ref().unwrap();
+                let _ = host.resize(&toolbar_offset_rect);
+                if let Ok(ocx_hwnd) = host.get_control_hwnd() {
+                    let _ = windows::Win32::UI::WindowsAndMessaging::SetWindowPos(
+                        ocx_hwnd,
+                        None,
+                        toolbar_offset_rect.left,
+                        toolbar_offset_rect.top,
+                        toolbar_offset_rect.right - toolbar_offset_rect.left,
+                        toolbar_offset_rect.bottom - toolbar_offset_rect.top,
+                        windows::Win32::UI::WindowsAndMessaging::SWP_NOZORDER
+                            | windows::Win32::UI::WindowsAndMessaging::SWP_NOACTIVATE,
+                    );
+                }
+
+                // Bring rebar above the OCX in z-order so it isn't covered
+                if let Some(rebar) = self.rebar_hwnd {
+                    let _ = windows::Win32::UI::WindowsAndMessaging::SetWindowPos(
+                        rebar,
+                        Some(windows::Win32::UI::WindowsAndMessaging::HWND_TOP),
+                        0,
+                        0,
+                        0,
+                        0,
+                        windows::Win32::UI::WindowsAndMessaging::SWP_NOMOVE
+                            | windows::Win32::UI::WindowsAndMessaging::SWP_NOSIZE
+                            | windows::Win32::UI::WindowsAndMessaging::SWP_NOACTIVATE,
+                    );
+                }
+            }
+        }
 
         // Store self pointer in window user data for the wndproc
         unsafe {
@@ -235,6 +733,14 @@ impl OcxWindow {
                 host: Some(host),
                 parent: Some(parent),
                 module: Some(module),
+                rebar_hwnd: None,
+                cb_font: None,
+                cb_charset: None,
+                btn_color: None,
+                                btn_bold: None,
+                btn_italic: None,
+                hfont_bold: None,
+                hfont_italic: None,
             });
 
             // Leak the box pointer into GWLP_USERDATA
@@ -262,16 +768,235 @@ impl OcxWindow {
             if user_data != 0 {
                 let this = &mut *(user_data as *mut Self);
                 match message {
+                    windows::Win32::UI::WindowsAndMessaging::WM_MEASUREITEM => {
+                        let mi = &mut *(lparam.0
+                            as *mut windows::Win32::UI::Controls::MEASUREITEMSTRUCT);
+                        if mi.CtlID == 2001 {
+                            mi.itemHeight = 22;
+                            return LRESULT(1);
+                        }
+                    }
+                    windows::Win32::UI::WindowsAndMessaging::WM_DRAWITEM => {
+                        let di =
+                            &*(lparam.0 as *const windows::Win32::UI::Controls::DRAWITEMSTRUCT);
+
+                        // Owner-draw color button (ID 2005)
+                        if di.CtlID == 2005 {
+                            let hdc = di.hDC;
+                            let rc = di.rcItem;
+
+                            // Read current color index from config
+                            let manager = crate::config::MSNConfigManager::new(
+                                std::path::Path::new("config.toml"),
+                            );
+                            let color_idx = manager
+                                .load()
+                                .ok()
+                                .and_then(|c| c.settings.fontcolor)
+                                .unwrap_or(0) as usize;
+                            let colorref = if color_idx < MSN_COLORS.len() {
+                                MSN_COLORS[color_idx]
+                            } else {
+                                MSN_COLORS[0]
+                            };
+
+                            // Fill with active color
+                            let brush = windows::Win32::Graphics::Gdi::CreateSolidBrush(
+                                windows::Win32::Foundation::COLORREF(colorref),
+                            );
+                            windows::Win32::Graphics::Gdi::FillRect(hdc, &rc, brush);
+                            let _ = windows::Win32::Graphics::Gdi::DeleteObject(brush.into());
+
+                            // Draw a thin border
+                            let _ = windows::Win32::Graphics::Gdi::DrawEdge(
+                                hdc,
+                                &mut rc.clone(),
+                                windows::Win32::Graphics::Gdi::EDGE_SUNKEN,
+                                windows::Win32::Graphics::Gdi::BF_RECT,
+                            );
+
+                            return LRESULT(1);
+                        }
+                                                if di.CtlID == 2001 {
+                            let state = di.itemState;
+                            let hdc = di.hDC;
+                            let rc = di.rcItem;
+
+                            // Determine which item index to draw. For the edit control part, we get the current selection.
+                                                        let item_idx = if di.itemID != u32::MAX {
+                                di.itemID as usize
+                            } else {
+                                send_message_w(
+                                    di.hwndItem,
+                                    windows::Win32::UI::WindowsAndMessaging::CB_GETCURSEL,
+                                    WPARAM(0),
+                                    LPARAM(0),
+                                )
+                                .0 as usize
+                            };
+
+                            let is_edit_control = (state.0
+                                & windows::Win32::UI::Controls::ODS_COMBOBOXEDIT.0)
+                                != 0;
+                            let is_selected = (state.0
+                                & windows::Win32::UI::Controls::ODS_SELECTED.0)
+                                != 0;
+
+                            let brush_color = if is_selected && !is_edit_control {
+                                windows::Win32::Graphics::Gdi::COLOR_HIGHLIGHT
+                            } else {
+                                windows::Win32::Graphics::Gdi::COLOR_WINDOW
+                            };
+                            windows::Win32::Graphics::Gdi::FillRect(
+                                hdc,
+                                &rc,
+                                windows::Win32::Graphics::Gdi::GetSysColorBrush(brush_color),
+                            );
+
+                            if item_idx != usize::MAX { // CB_ERR
+                                let mut font_name_buf = [0u16; 128];
+                                let _ = send_message_w(
+                                    di.hwndItem,
+                                    windows::Win32::UI::WindowsAndMessaging::CB_GETLBTEXT,
+                                    WPARAM(item_idx),
+                                    LPARAM(font_name_buf.as_mut_ptr() as isize),
+                                );
+                                let len = font_name_buf
+                                    .iter()
+                                    .position(|&x| x == 0)
+                                    .unwrap_or(font_name_buf.len());
+                                let font_name = String::from_utf16_lossy(&font_name_buf[..len]);
+
+                                let old_bk_mode = windows::Win32::Graphics::Gdi::SetBkMode(
+                                    hdc,
+                                    windows::Win32::Graphics::Gdi::BACKGROUND_MODE(1),
+                                );
+                                let text_color = if is_selected && !is_edit_control {
+                                    windows::Win32::Graphics::Gdi::GetSysColor(
+                                        windows::Win32::Graphics::Gdi::COLOR_HIGHLIGHTTEXT,
+                                    )
+                                } else {
+                                    windows::Win32::Graphics::Gdi::GetSysColor(
+                                        windows::Win32::Graphics::Gdi::COLOR_WINDOWTEXT,
+                                    )
+                                };
+                                let _ = windows::Win32::Graphics::Gdi::SetTextColor(
+                                    hdc,
+                                    windows::Win32::Foundation::COLORREF(text_color),
+                                );
+
+                                let mut lf = windows::Win32::Graphics::Gdi::LOGFONTW {
+                                    lfHeight: -14,
+                                    lfWeight: windows::Win32::Graphics::Gdi::FW_NORMAL.0 as i32,
+                                    ..Default::default()
+                                };
+
+                                let font_wstr: Vec<u16> = font_name.encode_utf16().collect();
+                                let copy_len = font_wstr.len().min(lf.lfFaceName.len() - 1);
+                                lf.lfFaceName[..copy_len].copy_from_slice(&font_wstr[..copy_len]);
+
+                                let hfont = windows::Win32::Graphics::Gdi::CreateFontIndirectW(&lf);
+                                let old_font =
+                                    windows::Win32::Graphics::Gdi::SelectObject(hdc, hfont.into());
+
+                                let mut draw_rc = rc;
+                                draw_rc.left += 4;
+                                let _ = windows::Win32::Graphics::Gdi::DrawTextW(
+                                    hdc,
+                                    &mut font_name_buf[..len],
+                                    &mut draw_rc,
+                                    windows::Win32::Graphics::Gdi::DT_SINGLELINE
+                                        | windows::Win32::Graphics::Gdi::DT_VCENTER,
+                                );
+
+                                windows::Win32::Graphics::Gdi::SelectObject(hdc, old_font);
+                                let _ = windows::Win32::Graphics::Gdi::DeleteObject(hfont.into());
+                                windows::Win32::Graphics::Gdi::SetBkMode(
+                                    hdc,
+                                    windows::Win32::Graphics::Gdi::BACKGROUND_MODE(
+                                        old_bk_mode as u32,
+                                    ),
+                                );
+                            }
+                            return LRESULT(1);
+                        }
+                    }
+                    windows::Win32::UI::WindowsAndMessaging::WM_NOTIFY => {
+                        // Forward rebar size changes
+                        let nmhdr = &*(lparam.0 as *const windows::Win32::UI::Controls::NMHDR);
+                        if nmhdr.code == windows::Win32::UI::Controls::RBN_HEIGHTCHANGE {
+                            // Trigger a resize to reflow the OCX below the rebar
+                            let _ = send_message_w(window, WM_SIZE, WPARAM(0), {
+                                let mut rc = RECT::default();
+                                let _ = windows::Win32::UI::WindowsAndMessaging::GetClientRect(
+                                    window, &mut rc,
+                                );
+                                LPARAM(
+                                    ((rc.bottom as u32) << 16 | (rc.right as u32 & 0xFFFF))
+                                        as isize,
+                                )
+                            });
+                        }
+                    }
                     WM_SIZE => {
                         let width = (lparam.0 & 0xFFFF) as i32;
                         let height = ((lparam.0 >> 16) & 0xFFFF) as i32;
+
+                        // Forward WM_SIZE to the rebar so it resizes itself
+                        if let Some(rebar) = this.rebar_hwnd {
+                            let _ = send_message_w(rebar, WM_SIZE, wparam, lparam);
+                        }
+
                         if let Some(host) = &this.host {
-                            let _ = host.resize(width, height);
+                            if this.parent.is_none() {
+                                // Position OCX below the rebar
+                                let rebar_h = this.rebar_hwnd.map(|r| send_message_w(r, windows::Win32::UI::Controls::RB_GETBARHEIGHT, WPARAM(0), LPARAM(0)).0 as i32).unwrap_or(0);
+                                                                let rect = RECT {
+                                    left: 0,
+                                    top: rebar_h,
+                                    right: width,
+                                    bottom: height,
+                                };
+                                let _ = host.resize(&rect);
+                                if let Ok(ocx_hwnd) = host.get_control_hwnd() {
+                                    let _ = windows::Win32::UI::WindowsAndMessaging::SetWindowPos(
+                                        ocx_hwnd,
+                                        None,
+                                        rect.left,
+                                        rect.top,
+                                        rect.right - rect.left,
+                                        rect.bottom - rect.top,
+                                        windows::Win32::UI::WindowsAndMessaging::SWP_NOZORDER
+                                            | windows::Win32::UI::WindowsAndMessaging::SWP_NOACTIVATE,
+                                    );
+                                }
+
+                                // Bring rebar above the OCX in z-order
+                                if let Some(rebar) = this.rebar_hwnd {
+                                    let _ = windows::Win32::UI::WindowsAndMessaging::SetWindowPos(
+                                        rebar,
+                                        Some(windows::Win32::UI::WindowsAndMessaging::HWND_TOP),
+                                        0, 0, 0, 0,
+                                        windows::Win32::UI::WindowsAndMessaging::SWP_NOMOVE
+                                            | windows::Win32::UI::WindowsAndMessaging::SWP_NOSIZE
+                                            | windows::Win32::UI::WindowsAndMessaging::SWP_NOACTIVATE,
+                                    );
+                                }
+                            } else {
+                                let rect = RECT {
+                                    left: 0,
+                                    top: 0,
+                                    right: width,
+                                    bottom: height,
+                                };
+                                let _ = host.resize(&rect);
+                            }
                         }
                         return LRESULT(0);
                     }
                     windows::Win32::UI::WindowsAndMessaging::WM_COMMAND => {
                         let id = (wparam.0 & 0xFFFF) as u32;
+                        let code = ((wparam.0 >> 16) & 0xFFFF) as u32;
                         match id {
                             1001 => {
                                 if let Some(module) = &this.module
@@ -285,6 +1010,274 @@ impl OcxWindow {
                                 let _ = windows::Win32::UI::WindowsAndMessaging::DestroyWindow(
                                     this.hwnd,
                                 );
+                            }
+                            2005 if code == windows::Win32::UI::WindowsAndMessaging::BN_CLICKED => {
+                                // Color button clicked — open ChooseColor dialog
+                                let manager = crate::config::MSNConfigManager::new(
+                                    std::path::Path::new("config.toml"),
+                                );
+                                let current_idx = manager
+                                    .load()
+                                    .ok()
+                                    .and_then(|c| c.settings.fontcolor)
+                                    .unwrap_or(0)
+                                    as usize;
+                                let current_colorref = if current_idx < MSN_COLORS.len() {
+                                    MSN_COLORS[current_idx]
+                                } else {
+                                    MSN_COLORS[0]
+                                };
+
+                                let mut cust_colors: [u32; 16] = MSN_COLORS;
+                                let mut cc = windows::Win32::UI::Controls::Dialogs::CHOOSECOLORW {
+                                    lStructSize: std::mem::size_of::<
+                                        windows::Win32::UI::Controls::Dialogs::CHOOSECOLORW,
+                                    >() as u32,
+                                    hwndOwner: this.hwnd,
+                                    rgbResult: windows::Win32::Foundation::COLORREF(
+                                        current_colorref,
+                                    ),
+                                    lpCustColors: cust_colors.as_mut_ptr()
+                                        as *mut windows::Win32::Foundation::COLORREF,
+                                    Flags: windows::Win32::UI::Controls::Dialogs::CC_RGBINIT
+                                        | windows::Win32::UI::Controls::Dialogs::CC_PREVENTFULLOPEN
+                                        | windows::Win32::UI::Controls::Dialogs::CC_ANYCOLOR,
+                                    ..Default::default()
+                                };
+
+                                if windows::Win32::UI::Controls::Dialogs::ChooseColorW(&mut cc)
+                                    .as_bool()
+                                {
+                                    let chosen = cc.rgbResult.0;
+                                    // Find the matching palette index
+                                    let new_idx =
+                                        MSN_COLORS.iter().position(|&c| c == chosen).unwrap_or(0)
+                                            as u32;
+
+                                    if let Ok(mut config) = manager.load() {
+                                        config.settings.fontcolor = Some(new_idx);
+                                        let _ = manager.save(&config);
+                                    }
+
+                                    // Redraw color button
+                                    let _ = windows::Win32::Graphics::Gdi::InvalidateRect(
+                                        this.btn_color,
+                                        None,
+                                        true,
+                                    );
+
+                                    // Broadcast update to the OCX
+                                    if let Some(host) = &this.host
+                                        && let Ok(hwnd_control) = host.get_control_hwnd()
+                                    {
+                                        let wm = windows::Win32::UI::WindowsAndMessaging::RegisterWindowMessageW(w!("WM_CHAT_UPDATESETTINGS"));
+                                        let _ =
+                                            windows::Win32::UI::WindowsAndMessaging::PostMessageW(
+                                                Some(hwnd_control),
+                                                wm,
+                                                WPARAM(0),
+                                                LPARAM(0),
+                                            );
+                                    }
+                                }
+                            }
+                            2001 | 2002
+                                if code
+                                    == windows::Win32::UI::WindowsAndMessaging::CBN_SELCHANGE =>
+                            {
+                                // Font / charset combo changed — save settings
+                                let mut font_name_buf = [0u16; 128];
+                                let font_idx = send_message_w(
+                                    this.cb_font.unwrap(),
+                                    windows::Win32::UI::WindowsAndMessaging::CB_GETCURSEL,
+                                    WPARAM(0),
+                                    LPARAM(0),
+                                )
+                                .0 as i32;
+
+                                let font_name = if font_idx >= 0 {
+                                    let _ = send_message_w(
+                                        this.cb_font.unwrap(),
+                                        windows::Win32::UI::WindowsAndMessaging::CB_GETLBTEXT,
+                                        WPARAM(font_idx as usize),
+                                        LPARAM(font_name_buf.as_mut_ptr() as isize),
+                                    );
+                                    let len = font_name_buf
+                                        .iter()
+                                        .position(|&x| x == 0)
+                                        .unwrap_or(font_name_buf.len());
+                                    String::from_utf16_lossy(&font_name_buf[..len])
+                                } else {
+                                    "Tahoma".to_string()
+                                };
+
+                                let charset_idx = send_message_w(
+                                    this.cb_charset.unwrap(),
+                                    windows::Win32::UI::WindowsAndMessaging::CB_GETCURSEL,
+                                    WPARAM(0),
+                                    LPARAM(0),
+                                )
+                                .0 as i32;
+
+                                let charset_val = if charset_idx >= 0 {
+                                    send_message_w(
+                                        this.cb_charset.unwrap(),
+                                        windows::Win32::UI::WindowsAndMessaging::CB_GETITEMDATA,
+                                        WPARAM(charset_idx as usize),
+                                        LPARAM(0),
+                                    )
+                                    .0 as i32
+                                } else {
+                                    0
+                                };
+
+                                // Read color from config (not from a combo anymore)
+                                let manager = crate::config::MSNConfigManager::new(
+                                    std::path::Path::new("config.toml"),
+                                );
+                                let color_val = manager
+                                    .load()
+                                    .ok()
+                                    .and_then(|c| c.settings.fontcolor)
+                                    .unwrap_or(0)
+                                    as i32;
+
+                                let bold_checked = send_message_w(
+                                    this.btn_bold.unwrap(),
+                                    windows::Win32::UI::WindowsAndMessaging::BM_GETCHECK,
+                                    WPARAM(0),
+                                    LPARAM(0),
+                                )
+                                .0 == 1;
+
+                                let italic_checked = send_message_w(
+                                    this.btn_italic.unwrap(),
+                                    windows::Win32::UI::WindowsAndMessaging::BM_GETCHECK,
+                                    WPARAM(0),
+                                    LPARAM(0),
+                                )
+                                .0 == 1;
+
+                                let fontstyle = (if bold_checked { 1 } else { 0 })
+                                    | (if italic_checked { 2 } else { 0 });
+                                let fontname_comb = format!("{};{}", font_name, charset_val);
+
+                                if let Ok(mut config) = manager.load() {
+                                    config.settings.fontname = Some(fontname_comb);
+                                    config.settings.fontstyle = Some(fontstyle);
+                                    config.settings.fontcolor = Some(color_val as u32);
+                                    let _ = manager.save(&config);
+                                }
+
+                                if let Some(host) = &this.host
+                                    && let Ok(hwnd_control) = host.get_control_hwnd()
+                                {
+                                    let wm = windows::Win32::UI::WindowsAndMessaging::RegisterWindowMessageW(w!("WM_CHAT_UPDATESETTINGS"));
+                                    let _ = windows::Win32::UI::WindowsAndMessaging::PostMessageW(
+                                        Some(hwnd_control),
+                                        wm,
+                                        WPARAM(0),
+                                        LPARAM(0),
+                                    );
+                                }
+                            }
+                            2003 | 2004
+                                if code == windows::Win32::UI::WindowsAndMessaging::BN_CLICKED =>
+                            {
+                                // Bold/Italic buttons — read all state and save
+                                let mut font_name_buf = [0u16; 128];
+                                let font_idx = send_message_w(
+                                    this.cb_font.unwrap(),
+                                    windows::Win32::UI::WindowsAndMessaging::CB_GETCURSEL,
+                                    WPARAM(0),
+                                    LPARAM(0),
+                                )
+                                .0 as i32;
+
+                                let font_name = if font_idx >= 0 {
+                                    let _ = send_message_w(
+                                        this.cb_font.unwrap(),
+                                        windows::Win32::UI::WindowsAndMessaging::CB_GETLBTEXT,
+                                        WPARAM(font_idx as usize),
+                                        LPARAM(font_name_buf.as_mut_ptr() as isize),
+                                    );
+                                    let len = font_name_buf
+                                        .iter()
+                                        .position(|&x| x == 0)
+                                        .unwrap_or(font_name_buf.len());
+                                    String::from_utf16_lossy(&font_name_buf[..len])
+                                } else {
+                                    "Tahoma".to_string()
+                                };
+
+                                let charset_idx = send_message_w(
+                                    this.cb_charset.unwrap(),
+                                    windows::Win32::UI::WindowsAndMessaging::CB_GETCURSEL,
+                                    WPARAM(0),
+                                    LPARAM(0),
+                                )
+                                .0 as i32;
+
+                                let charset_val = if charset_idx >= 0 {
+                                    send_message_w(
+                                        this.cb_charset.unwrap(),
+                                        windows::Win32::UI::WindowsAndMessaging::CB_GETITEMDATA,
+                                        WPARAM(charset_idx as usize),
+                                        LPARAM(0),
+                                    )
+                                    .0 as i32
+                                } else {
+                                    0
+                                };
+
+                                let manager = crate::config::MSNConfigManager::new(
+                                    std::path::Path::new("config.toml"),
+                                );
+                                let color_val = manager
+                                    .load()
+                                    .ok()
+                                    .and_then(|c| c.settings.fontcolor)
+                                    .unwrap_or(0)
+                                    as i32;
+
+                                let bold_checked = send_message_w(
+                                    this.btn_bold.unwrap(),
+                                    windows::Win32::UI::WindowsAndMessaging::BM_GETCHECK,
+                                    WPARAM(0),
+                                    LPARAM(0),
+                                )
+                                .0 == 1;
+
+                                let italic_checked = send_message_w(
+                                    this.btn_italic.unwrap(),
+                                    windows::Win32::UI::WindowsAndMessaging::BM_GETCHECK,
+                                    WPARAM(0),
+                                    LPARAM(0),
+                                )
+                                .0 == 1;
+
+                                let fontstyle = (if bold_checked { 1 } else { 0 })
+                                    | (if italic_checked { 2 } else { 0 });
+                                let fontname_comb = format!("{};{}", font_name, charset_val);
+
+                                if let Ok(mut config) = manager.load() {
+                                    config.settings.fontname = Some(fontname_comb);
+                                    config.settings.fontstyle = Some(fontstyle);
+                                    config.settings.fontcolor = Some(color_val as u32);
+                                    let _ = manager.save(&config);
+                                }
+
+                                if let Some(host) = &this.host
+                                    && let Ok(hwnd_control) = host.get_control_hwnd()
+                                {
+                                    let wm = windows::Win32::UI::WindowsAndMessaging::RegisterWindowMessageW(w!("WM_CHAT_UPDATESETTINGS"));
+                                    let _ = windows::Win32::UI::WindowsAndMessaging::PostMessageW(
+                                        Some(hwnd_control),
+                                        wm,
+                                        WPARAM(0),
+                                        LPARAM(0),
+                                    );
+                                }
                             }
                             _ => {}
                         }
@@ -322,7 +1315,22 @@ impl OcxWindow {
                 return LRESULT(0);
             }
 
-            DefWindowProcW(window, message, wparam, lparam)
+                        DefWindowProcW(window, message, wparam, lparam)
+        }
+    }
+}
+
+impl Drop for OcxWindow {
+    fn drop(&mut self) {
+        if let Some(hfont) = self.hfont_bold.take() {
+            unsafe {
+                let _ = windows::Win32::Graphics::Gdi::DeleteObject(hfont.into());
+            }
+        }
+        if let Some(hfont) = self.hfont_italic.take() {
+            unsafe {
+                let _ = windows::Win32::Graphics::Gdi::DeleteObject(hfont.into());
+            }
         }
     }
 }

@@ -133,19 +133,21 @@ impl OcxHost {
         Ok(())
     }
 
-    pub fn resize(&self, width: i32, height: i32) -> Result<()> {
+    pub fn resize(&self, rect: &RECT) -> Result<()> {
         if let Some(inplace) = &self.inplace_object {
-            let rect = RECT {
-                left: 0,
-                top: 0,
-                right: width,
-                bottom: height,
-            };
             unsafe {
-                inplace.SetObjectRects(&rect, &rect)?;
+                inplace.SetObjectRects(rect, rect)?;
             }
         }
         Ok(())
+    }
+
+    pub fn get_control_hwnd(&self) -> Result<HWND> {
+        if let Some(inplace) = &self.inplace_object {
+            unsafe { inplace.GetWindow() }
+        } else {
+            Err(windows::core::Error::from_hresult(windows::core::HRESULT(E_FAIL.0)))
+        }
     }
 
     pub fn get_extent(&self) -> Result<windows::Win32::Foundation::SIZE> {
