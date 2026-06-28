@@ -2,8 +2,7 @@
 #![allow(clippy::missing_safety_doc)]
 #![allow(unused_unsafe)]
 
-use windows::Win32::System::Ole::OleInitialize;
-use windows::core::{GUID, Result};
+use windows::core::Result;
 
 pub mod audio;
 pub mod config;
@@ -11,29 +10,13 @@ pub mod host;
 pub mod network;
 pub mod patch;
 
-use host::window::OcxWindow;
-
 fn main() -> Result<()> {
+
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
 
     if let Err(e) = unsafe { patch::loader_hook::init_dll_hooks() } {
         log::error!("Failed to init hooks: {}", e);
     }
-    // Initialize OLE / COM
-    unsafe {
-        OleInitialize(None)?;
-    }
-
-    // Create the main window
-    let mut main_window = OcxWindow::new()?;
-
-    // Attach the MSN Chat OCX
-    let clsid = GUID::from_values(
-        0xF58E1CEF,
-        0xA068,
-        0x4c15,
-        [0xBA, 0x5E, 0x58, 0x7C, 0xAF, 0x3E, 0xE8, 0xC6],
-    );
 
     #[repr(C, align(64))]
     struct AlignedBytes<const N: usize>(pub [u8; N]);
@@ -64,38 +47,46 @@ fn main() -> Result<()> {
     let manual_module =
         std::sync::Arc::new(unsafe { patch::pe::ManualModule::load(dll_bytes) }.unwrap());
 
-    // Attempt to load and embed the control
-    match main_window.attach_ocx(manual_module.clone(), &clsid, |host| {
-        let _ = host.put_property("BaseURL", "http://chat.msn.com/");
-        let _ = host.put_property("Market", "en-au");
-
-        let random_id = (uuid::Uuid::new_v4().as_u128() % 10000) as u32;
-        let nickname = format!("JD{:04}", random_id);
-        let _ = host.put_property("AuditMessage", "Note: MSN has detected that you are connected to this chat session from the IP address <b>%1</b>.");
-        let _ = host.put_property("ChatMode", "0");
-        let _ = host.put_property("InvitationCode", "5355");
-        let _ = host.put_property("MessageOfTheDay", "Welcome to MSN Chat. Important: MSN does not control or endorse the content, messages or information found in chat. MSN specifically disclaims any liability with regard to these areas. To review the guidelines for use of MSN Chat, go to http://chat.msn.com/conduct.asp.");
-        let _ = host.put_property("NickName", &nickname);
-        let _ = host.put_property("RoomName", "The Lobby");
-        let _ = host.put_property("Server", "dir.irc7.com");
-        let _ = host.put_property("WhisperContent", "http://test.example.com/whisper");
-    }) {
-        Ok(_) => {
-            // Run the standard message pump
-            OcxWindow::run_message_loop()?;
+    // Run the WinUI 3 application
+    if let Err(e) = host::window::run_winui_app(manual_module) {
+        log::error!("WinUI 3 application failed to run: {}", e);
+        if e.code().0 == 0x80040154u32 as i32 || e.message().contains("0x80040154") {
+            show_missing_runtime_dialog();
+            std::process::exit(0);
         }
-        Err(e) => {
-            // Display an error message if loading fails
-            unsafe {
-                windows::Win32::UI::WindowsAndMessaging::MessageBoxW(
-                    None,
-                    &windows::core::HSTRING::from(format!("Failed to load OCX: {}", e)),
-                    windows::core::w!("Error"),
-                    windows::Win32::UI::WindowsAndMessaging::MB_ICONERROR,
-                );
-            }
-        }
+        return Err(e);
     }
 
     Ok(())
+}
+
+fn show_missing_runtime_dialog() {
+    use windows::core::w;
+    use windows::Win32::UI::WindowsAndMessaging::{MessageBoxW, MB_YESNO, MB_ICONERROR, IDYES};
+    use windows::Win32::UI::Shell::ShellExecuteW;
+    use windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
+    use windows::Win32::System::Com::{CoInitializeEx, COINIT_APARTMENTTHREADED};
+
+    unsafe {
+        // Initialize COM on this thread so ShellExecuteW can resolve protocol handlers
+        let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
+
+        let result = MessageBoxW(
+            None,
+            w!("This application requires the Windows App SDK runtime to run.\n\nError: Class not registered (0x80040154).\n\nWould you like to download and install the Windows App SDK runtime now?"),
+            w!("Missing Windows App SDK Runtime"),
+            MB_YESNO | MB_ICONERROR,
+        );
+
+        if result == IDYES {
+            let _ = ShellExecuteW(
+                None,
+                w!("open"),
+                w!("https://learn.microsoft.com/en-us/windows/apps/windows-app-sdk/downloads"),
+                None,
+                None,
+                SW_SHOWNORMAL,
+            );
+        }
+    }
 }

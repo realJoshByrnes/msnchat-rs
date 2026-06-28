@@ -277,3 +277,7 @@ impl OcxHost {
         }
     }
 }
+
+unsafe impl Send for OcxHost {}
+unsafe impl Sync for OcxHost {}
+
