@@ -40,19 +40,21 @@ unsafe fn send_message_w(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM) -
     }
 }
 
-
-
 unsafe extern "system" fn enum_font_fam_ex_proc(
     lpelfe: *const windows::Win32::Graphics::Gdi::LOGFONTW,
     _lpntme: *const windows::Win32::Graphics::Gdi::TEXTMETRICW,
-    _fonttype: u32,
+    fonttype: u32,
     lparam: LPARAM,
 ) -> i32 {
     unsafe {
         let list = &mut *(lparam.0 as *mut Vec<String>);
         let font_name = String::from_utf16_lossy(&(*lpelfe).lfFaceName);
         let font_name = font_name.trim_end_matches('\0').to_string();
-        if !font_name.is_empty() && !list.contains(&font_name) && !font_name.starts_with('@') {
+        if (fonttype & windows::Win32::Graphics::Gdi::TRUETYPE_FONTTYPE) != 0
+            && !font_name.is_empty()
+            && !list.contains(&font_name)
+            && !font_name.starts_with('@')
+        {
             list.push(font_name);
         }
         1
@@ -68,7 +70,7 @@ pub struct OcxWindow {
     cb_font: Option<HWND>,
     cb_charset: Option<HWND>,
     btn_color: Option<HWND>,
-        btn_bold: Option<HWND>,
+    btn_bold: Option<HWND>,
     btn_italic: Option<HWND>,
     hfont_bold: Option<windows::Win32::Graphics::Gdi::HFONT>,
     hfont_italic: Option<windows::Win32::Graphics::Gdi::HFONT>,
@@ -139,9 +141,18 @@ impl OcxWindow {
         }
 
         // Create child controls for toolbar, hosted inside a rebar
-        let (rebar_hwnd, cb_font, cb_charset, btn_color, btn_bold, btn_italic, hfont_bold, hfont_italic) = unsafe {
+        let (
+            rebar_hwnd,
+            cb_font,
+            cb_charset,
+            btn_color,
+            btn_bold,
+            btn_italic,
+            hfont_bold,
+            hfont_italic,
+        ) = unsafe {
             // Create the rebar control
-                        let rebar = CreateWindowExW(
+            let rebar = CreateWindowExW(
                 windows::Win32::UI::WindowsAndMessaging::WINDOW_EX_STYLE::default(),
                 w!("ReBarWindow32"),
                 None,
@@ -187,9 +198,7 @@ impl OcxWindow {
             let _ = send_message_w(
                 toolbar,
                 windows::Win32::UI::Controls::TB_BUTTONSTRUCTSIZE,
-                WPARAM(
-                    std::mem::size_of::<windows::Win32::UI::Controls::TBBUTTON>() as usize,
-                ),
+                WPARAM(std::mem::size_of::<windows::Win32::UI::Controls::TBBUTTON>() as usize),
                 LPARAM(0),
             );
 
@@ -206,7 +215,10 @@ impl OcxWindow {
                         | windows::Win32::UI::WindowsAndMessaging::WS_VSCROLL.0
                         | windows::Win32::UI::WindowsAndMessaging::WS_TABSTOP.0,
                 ),
-                                5, 2, 150, 200, // Positioned on toolbar
+                5,
+                2,
+                150,
+                200, // Positioned on toolbar
                 Some(toolbar),
                 Some(windows::Win32::UI::WindowsAndMessaging::HMENU(
                     2001 as *mut std::ffi::c_void,
@@ -225,7 +237,10 @@ impl OcxWindow {
                         | windows::Win32::UI::WindowsAndMessaging::CBS_DROPDOWNLIST as u32
                         | windows::Win32::UI::WindowsAndMessaging::WS_TABSTOP.0,
                 ),
-                                160, 2, 120, 200, // Positioned on toolbar
+                160,
+                2,
+                120,
+                200, // Positioned on toolbar
                 Some(toolbar),
                 Some(windows::Win32::UI::WindowsAndMessaging::HMENU(
                     2002 as *mut std::ffi::c_void,
@@ -243,7 +258,10 @@ impl OcxWindow {
                         | windows::Win32::UI::WindowsAndMessaging::WS_VISIBLE.0
                         | windows::Win32::UI::WindowsAndMessaging::BS_OWNERDRAW as u32,
                 ),
-                                285, 2, 26, 22, // Positioned on toolbar
+                285,
+                2,
+                26,
+                22, // Positioned on toolbar
                 Some(toolbar),
                 Some(windows::Win32::UI::WindowsAndMessaging::HMENU(
                     2005 as *mut std::ffi::c_void,
@@ -255,14 +273,17 @@ impl OcxWindow {
             let btn_bold = CreateWindowExW(
                 windows::Win32::UI::WindowsAndMessaging::WINDOW_EX_STYLE::default(),
                 w!("BUTTON"),
-                                w!("B"),
+                w!("B"),
                 windows::Win32::UI::WindowsAndMessaging::WINDOW_STYLE(
                     windows::Win32::UI::WindowsAndMessaging::WS_CHILD.0
                         | windows::Win32::UI::WindowsAndMessaging::WS_VISIBLE.0
                         | windows::Win32::UI::WindowsAndMessaging::BS_AUTOCHECKBOX as u32
                         | windows::Win32::UI::WindowsAndMessaging::BS_PUSHLIKE as u32,
                 ),
-                316, 2, 26, 22, // Positioned on toolbar
+                316,
+                2,
+                26,
+                22, // Positioned on toolbar
                 Some(toolbar),
                 Some(windows::Win32::UI::WindowsAndMessaging::HMENU(
                     2003 as *mut std::ffi::c_void,
@@ -274,14 +295,17 @@ impl OcxWindow {
             let btn_italic = CreateWindowExW(
                 windows::Win32::UI::WindowsAndMessaging::WINDOW_EX_STYLE::default(),
                 w!("BUTTON"),
-                                w!("I"),
+                w!("I"),
                 windows::Win32::UI::WindowsAndMessaging::WINDOW_STYLE(
                     windows::Win32::UI::WindowsAndMessaging::WS_CHILD.0
                         | windows::Win32::UI::WindowsAndMessaging::WS_VISIBLE.0
                         | windows::Win32::UI::WindowsAndMessaging::BS_AUTOCHECKBOX as u32
                         | windows::Win32::UI::WindowsAndMessaging::BS_PUSHLIKE as u32,
                 ),
-                347, 2, 26, 22, // Positioned on toolbar
+                347,
+                2,
+                26,
+                22, // Positioned on toolbar
                 Some(toolbar),
                 Some(windows::Win32::UI::WindowsAndMessaging::HMENU(
                     2004 as *mut std::ffi::c_void,
@@ -306,7 +330,7 @@ impl OcxWindow {
                 WPARAM(gui_font.0 as usize),
                 LPARAM(0),
             );
-                        // Create bold and italic fonts for the style buttons
+            // Create bold and italic fonts for the style buttons
             let mut lf: windows::Win32::Graphics::Gdi::LOGFONTW = std::mem::zeroed();
             windows::Win32::Graphics::Gdi::GetObjectW(
                 gui_font,
@@ -425,7 +449,7 @@ impl OcxWindow {
             )
             .0 as i32;
             if idx >= 0 {
-                                let _ = send_message_w(
+                let _ = send_message_w(
                     cb_font,
                     windows::Win32::UI::WindowsAndMessaging::CB_SETCURSEL,
                     WPARAM(idx as usize),
@@ -478,7 +502,7 @@ impl OcxWindow {
             // Invalidate the color button so it draws the initial color
             let _ = windows::Win32::Graphics::Gdi::InvalidateRect(Some(btn_color), None, true);
 
-                        // Insert the toolbar as a single band into the rebar
+            // Insert the toolbar as a single band into the rebar
             let rbbi = windows::Win32::UI::Controls::REBARBANDINFOW {
                 cbSize: std::mem::size_of::<windows::Win32::UI::Controls::REBARBANDINFOW>() as u32,
                 fMask: windows::Win32::UI::Controls::RBBIM_STYLE
@@ -507,7 +531,7 @@ impl OcxWindow {
                 let _ = send_message_w(rebar, WM_SIZE, WPARAM(0), lp);
             }
 
-                        (
+            (
                 Some(rebar),
                 Some(cb_font),
                 Some(cb_charset),
@@ -519,7 +543,7 @@ impl OcxWindow {
             )
         };
 
-                Ok(Self {
+        Ok(Self {
             hwnd,
             host: None,
             parent: None,
@@ -556,7 +580,18 @@ impl OcxWindow {
                 let mut rect = RECT::default();
                 let _ =
                     windows::Win32::UI::WindowsAndMessaging::GetClientRect(self.hwnd, &mut rect);
-                let rebar_h = self.rebar_hwnd.map(|r| send_message_w(r, windows::Win32::UI::Controls::RB_GETBARHEIGHT, WPARAM(0), LPARAM(0)).0 as i32).unwrap_or(32);
+                let rebar_h = self
+                    .rebar_hwnd
+                    .map(|r| {
+                        send_message_w(
+                            r,
+                            windows::Win32::UI::Controls::RB_GETBARHEIGHT,
+                            WPARAM(0),
+                            LPARAM(0),
+                        )
+                        .0 as i32
+                    })
+                    .unwrap_or(32);
                 let toolbar_offset_rect = RECT {
                     left: 0,
                     top: rebar_h,
@@ -737,7 +772,7 @@ impl OcxWindow {
                 cb_font: None,
                 cb_charset: None,
                 btn_color: None,
-                                btn_bold: None,
+                btn_bold: None,
                 btn_italic: None,
                 hfont_bold: None,
                 hfont_italic: None,
@@ -817,13 +852,13 @@ impl OcxWindow {
 
                             return LRESULT(1);
                         }
-                                                if di.CtlID == 2001 {
+                        if di.CtlID == 2001 {
                             let state = di.itemState;
                             let hdc = di.hDC;
                             let rc = di.rcItem;
 
                             // Determine which item index to draw. For the edit control part, we get the current selection.
-                                                        let item_idx = if di.itemID != u32::MAX {
+                            let item_idx = if di.itemID != u32::MAX {
                                 di.itemID as usize
                             } else {
                                 send_message_w(
@@ -835,12 +870,10 @@ impl OcxWindow {
                                 .0 as usize
                             };
 
-                            let is_edit_control = (state.0
-                                & windows::Win32::UI::Controls::ODS_COMBOBOXEDIT.0)
-                                != 0;
-                            let is_selected = (state.0
-                                & windows::Win32::UI::Controls::ODS_SELECTED.0)
-                                != 0;
+                            let is_edit_control =
+                                (state.0 & windows::Win32::UI::Controls::ODS_COMBOBOXEDIT.0) != 0;
+                            let is_selected =
+                                (state.0 & windows::Win32::UI::Controls::ODS_SELECTED.0) != 0;
 
                             let brush_color = if is_selected && !is_edit_control {
                                 windows::Win32::Graphics::Gdi::COLOR_HIGHLIGHT
@@ -853,7 +886,8 @@ impl OcxWindow {
                                 windows::Win32::Graphics::Gdi::GetSysColorBrush(brush_color),
                             );
 
-                            if item_idx != usize::MAX { // CB_ERR
+                            if item_idx != usize::MAX {
+                                // CB_ERR
                                 let mut font_name_buf = [0u16; 128];
                                 let _ = send_message_w(
                                     di.hwndItem,
@@ -950,8 +984,19 @@ impl OcxWindow {
                         if let Some(host) = &this.host {
                             if this.parent.is_none() {
                                 // Position OCX below the rebar
-                                let rebar_h = this.rebar_hwnd.map(|r| send_message_w(r, windows::Win32::UI::Controls::RB_GETBARHEIGHT, WPARAM(0), LPARAM(0)).0 as i32).unwrap_or(0);
-                                                                let rect = RECT {
+                                let rebar_h = this
+                                    .rebar_hwnd
+                                    .map(|r| {
+                                        send_message_w(
+                                            r,
+                                            windows::Win32::UI::Controls::RB_GETBARHEIGHT,
+                                            WPARAM(0),
+                                            LPARAM(0),
+                                        )
+                                        .0 as i32
+                                    })
+                                    .unwrap_or(0);
+                                let rect = RECT {
                                     left: 0,
                                     top: rebar_h,
                                     right: width,
@@ -1315,7 +1360,7 @@ impl OcxWindow {
                 return LRESULT(0);
             }
 
-                        DefWindowProcW(window, message, wparam, lparam)
+            DefWindowProcW(window, message, wparam, lparam)
         }
     }
 }
