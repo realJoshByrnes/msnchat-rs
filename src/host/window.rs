@@ -82,10 +82,7 @@ unsafe extern "system" fn rebar_wndproc(
             old_wndproc = this.old_rebar_wndproc;
         }
 
-        if (message == windows::Win32::UI::WindowsAndMessaging::WM_SHOWWINDOW
-            || message == windows::Win32::UI::WindowsAndMessaging::WM_WINDOWPOSCHANGED)
-            && user_data != 0
-        {
+        if message == windows::Win32::UI::WindowsAndMessaging::WM_SHOWWINDOW && user_data != 0 {
             let mut rc = RECT::default();
             let _ = windows::Win32::UI::WindowsAndMessaging::GetClientRect(parent, &mut rc);
             let lp = LPARAM(((rc.bottom as u32) << 16 | (rc.right as u32 & 0xFFFF)) as isize);
@@ -153,6 +150,7 @@ pub struct OcxWindow {
     parent: Option<HWND>,
     module: Option<std::sync::Arc<crate::patch::pe::ManualModule>>,
     rebar_hwnd: Option<HWND>,
+    toolbar_hwnd: Option<HWND>,
     cb_font: Option<HWND>,
     cb_charset: Option<HWND>,
     btn_color: Option<HWND>,
@@ -234,6 +232,7 @@ impl OcxWindow {
         // Create child controls for toolbar, hosted inside a rebar
         let (
             rebar_hwnd,
+            toolbar_hwnd,
             cb_font,
             cb_charset,
             btn_color,
@@ -689,6 +688,7 @@ impl OcxWindow {
 
             (
                 Some(rebar),
+                Some(toolbar),
                 Some(cb_font),
                 Some(cb_charset),
                 Some(btn_color),
@@ -709,6 +709,7 @@ impl OcxWindow {
             parent: None,
             module: None,
             rebar_hwnd,
+            toolbar_hwnd,
             cb_font,
             cb_charset,
             btn_color,
@@ -962,6 +963,7 @@ impl OcxWindow {
                 parent: Some(parent),
                 module: Some(module),
                 rebar_hwnd: None,
+                toolbar_hwnd: None,
                 cb_font: None,
                 cb_charset: None,
                 btn_color: None,
@@ -1305,6 +1307,29 @@ impl OcxWindow {
                         // Forward WM_SIZE to the rebar so it resizes itself
                         if let Some(rebar) = this.rebar_hwnd {
                             let _ = send_message_w(rebar, WM_SIZE, wparam, lparam);
+                            let _ = windows::Win32::Graphics::Gdi::InvalidateRect(
+                                Some(rebar),
+                                None,
+                                true,
+                            );
+                        }
+
+                        if let Some(toolbar) = this.toolbar_hwnd {
+                            let _ = windows::Win32::UI::WindowsAndMessaging::SetWindowPos(
+                                toolbar,
+                                None,
+                                0,
+                                0,
+                                width,
+                                28,
+                                windows::Win32::UI::WindowsAndMessaging::SWP_NOZORDER
+                                    | windows::Win32::UI::WindowsAndMessaging::SWP_NOACTIVATE,
+                            );
+                            let _ = windows::Win32::Graphics::Gdi::InvalidateRect(
+                                Some(toolbar),
+                                None,
+                                true,
+                            );
                         }
 
                         if let Some(host) = &this.host {
