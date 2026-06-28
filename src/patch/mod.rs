@@ -3,6 +3,7 @@ use std::ffi::c_void;
 
 pub mod channel;
 pub mod directory;
+pub mod font_style_patch;
 pub mod loader_hook;
 pub mod module_info;
 pub mod network;

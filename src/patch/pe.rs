@@ -278,6 +278,9 @@ impl ManualModule {
             if let Err(e) = crate::patch::virtual_protect::apply(&module_info) {
                 log::error!("Failed to apply virtual_protect patch: {}", e);
             }
+            if let Err(e) = crate::patch::font_style_patch::apply(&module_info) {
+                log::error!("Failed to apply font_style_patch patch: {}", e);
+            }
             if let Err(e) = crate::patch::directory::apply(&module_info) {
                 log::error!("Failed to apply Directory Server patches: {}", e);
             }
