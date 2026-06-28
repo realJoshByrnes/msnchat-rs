@@ -3,10 +3,10 @@ use windows::{
         Foundation::{HWND, LPARAM, LRESULT, RECT, WPARAM},
         System::LibraryLoader::GetModuleHandleW,
         UI::WindowsAndMessaging::{
-            AppendMenuW, CS_HREDRAW, CS_VREDRAW, CW_USEDEFAULT, CreateMenu, CreatePopupMenu,
-            CreateWindowExW, DefWindowProcW, DispatchMessageW, GetMessageW, MF_POPUP, MF_STRING,
+            AppendMenuW, CS_HREDRAW, CS_VREDRAW, CW_USEDEFAULT, CallWindowProcW, CreateMenu, CreatePopupMenu,
+            CreateWindowExW, DefWindowProcW, DispatchMessageW, GWLP_WNDPROC, GetMessageW, MF_POPUP, MF_STRING,
             MSG, PostQuitMessage, RegisterClassW, SetMenu, TranslateMessage, WM_DESTROY, WM_SIZE,
-            WNDCLASSW, WS_OVERLAPPEDWINDOW, WS_VISIBLE,
+            WNDCLASSW, WNDPROC, WS_OVERLAPPEDWINDOW, WS_VISIBLE,
         },
     },
     core::{GUID, Result, w},
@@ -61,6 +61,56 @@ unsafe extern "system" fn enum_font_fam_ex_proc(
     }
 }
 
+unsafe extern "system" fn rebar_wndproc(
+    hwnd: HWND,
+    message: u32,
+    wparam: WPARAM,
+    lparam: LPARAM,
+) -> LRESULT {
+    unsafe {
+        let Ok(parent) = windows::Win32::UI::WindowsAndMessaging::GetParent(hwnd) else {
+            return DefWindowProcW(hwnd, message, wparam, lparam);
+        };
+        let user_data = windows::Win32::UI::WindowsAndMessaging::GetWindowLongW(
+            parent,
+            windows::Win32::UI::WindowsAndMessaging::GWLP_USERDATA,
+        );
+        let mut old_wndproc: Option<WNDPROC> = None;
+        if user_data != 0 {
+            let this = &*(user_data as *const OcxWindow);
+            old_wndproc = this.old_rebar_wndproc;
+        }
+
+        if message == windows::Win32::UI::WindowsAndMessaging::WM_SHOWWINDOW
+            || message == windows::Win32::UI::WindowsAndMessaging::WM_WINDOWPOSCHANGED
+        {
+            if user_data != 0 {
+                let mut rc = RECT::default();
+                let _ = windows::Win32::UI::WindowsAndMessaging::GetClientRect(parent, &mut rc);
+                let lp = LPARAM(((rc.bottom as u32) << 16 | (rc.right as u32 & 0xFFFF)) as isize);
+                let _ = windows::Win32::UI::WindowsAndMessaging::PostMessageW(
+                    Some(parent),
+                    WM_SIZE,
+                    WPARAM(0),
+                    lp,
+                );
+            }
+        }
+
+        if let Some(old) = old_wndproc {
+            CallWindowProcW(
+                old,
+                hwnd,
+                message,
+                wparam,
+                lparam,
+            )
+        } else {
+            DefWindowProcW(hwnd, message, wparam, lparam)
+        }
+    }
+}
+
 pub struct OcxWindow {
     hwnd: HWND,
     host: Option<OcxHost>,
@@ -74,6 +124,7 @@ pub struct OcxWindow {
     btn_italic: Option<HWND>,
     hfont_bold: Option<windows::Win32::Graphics::Gdi::HFONT>,
     hfont_italic: Option<windows::Win32::Graphics::Gdi::HFONT>,
+    old_rebar_wndproc: Option<WNDPROC>,
 }
 
 impl OcxWindow {
@@ -150,6 +201,7 @@ impl OcxWindow {
             btn_italic,
             hfont_bold,
             hfont_italic,
+            old_rebar_wndproc,
         ) = unsafe {
             // Create the rebar control
             let rebar = CreateWindowExW(
@@ -531,6 +583,18 @@ impl OcxWindow {
                 let _ = send_message_w(rebar, WM_SIZE, WPARAM(0), lp);
             }
 
+            // Subclass the rebar
+            let old_wndproc_val = windows::Win32::UI::WindowsAndMessaging::GetWindowLongW(
+                rebar,
+                GWLP_WNDPROC,
+            );
+            let old_rebar_wndproc: WNDPROC = std::mem::transmute(old_wndproc_val as isize);
+            windows::Win32::UI::WindowsAndMessaging::SetWindowLongW(
+                rebar,
+                GWLP_WNDPROC,
+                rebar_wndproc as *const () as isize as i32,
+            );
+
             (
                 Some(rebar),
                 Some(cb_font),
@@ -540,6 +604,7 @@ impl OcxWindow {
                 Some(btn_italic),
                 hfont_bold,
                 hfont_italic,
+                Some(old_rebar_wndproc),
             )
         };
 
@@ -556,6 +621,7 @@ impl OcxWindow {
             btn_italic,
             hfont_bold: Some(hfont_bold),
             hfont_italic: Some(hfont_italic),
+            old_rebar_wndproc,
         })
     }
 
@@ -582,16 +648,18 @@ impl OcxWindow {
                     windows::Win32::UI::WindowsAndMessaging::GetClientRect(self.hwnd, &mut rect);
                 let rebar_h = self
                     .rebar_hwnd
+                    .filter(|&r| unsafe { windows::Win32::UI::WindowsAndMessaging::IsWindowVisible(r).as_bool() })
                     .map(|r| {
-                        send_message_w(
+                        let h = send_message_w(
                             r,
                             windows::Win32::UI::Controls::RB_GETBARHEIGHT,
                             WPARAM(0),
                             LPARAM(0),
                         )
-                        .0 as i32
+                        .0 as i32;
+                        if h == 0 { 32 } else { h }
                     })
-                    .unwrap_or(32);
+                    .unwrap_or(0);
                 let toolbar_offset_rect = RECT {
                     left: 0,
                     top: rebar_h,
@@ -776,6 +844,7 @@ impl OcxWindow {
                 btn_italic: None,
                 hfont_bold: None,
                 hfont_italic: None,
+                old_rebar_wndproc: None,
             });
 
             // Leak the box pointer into GWLP_USERDATA
@@ -986,14 +1055,16 @@ impl OcxWindow {
                                 // Position OCX below the rebar
                                 let rebar_h = this
                                     .rebar_hwnd
+                                    .filter(|&r| unsafe { windows::Win32::UI::WindowsAndMessaging::IsWindowVisible(r).as_bool() })
                                     .map(|r| {
-                                        send_message_w(
+                                        let h = send_message_w(
                                             r,
                                             windows::Win32::UI::Controls::RB_GETBARHEIGHT,
                                             WPARAM(0),
                                             LPARAM(0),
                                         )
-                                        .0 as i32
+                                        .0 as i32;
+                                        if h == 0 { 32 } else { h }
                                     })
                                     .unwrap_or(0);
                                 let rect = RECT {
