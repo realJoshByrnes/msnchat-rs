@@ -124,16 +124,10 @@ unsafe extern "system" fn get_window_context(
             *pp_doc = ptr::null_mut();
         }
         if !lprc_pos_rect.is_null() {
-            let _ = windows::Win32::UI::WindowsAndMessaging::GetClientRect(
-                (*site.shared).hwnd,
-                lprc_pos_rect,
-            );
+            *lprc_pos_rect = (*site.shared).rect;
         }
         if !lprc_clip_rect.is_null() {
-            let _ = windows::Win32::UI::WindowsAndMessaging::GetClientRect(
-                (*site.shared).hwnd,
-                lprc_clip_rect,
-            );
+            *lprc_clip_rect = (*site.shared).rect;
         }
         if !lp_frame_info.is_null() {
             (*lp_frame_info).cb = std::mem::size_of::<OLEINPLACEFRAMEINFO>() as u32;

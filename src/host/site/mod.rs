@@ -23,6 +23,7 @@ pub struct SharedSiteState {
     pub navigate: *mut navigate::MyOleNavigate,
     pub browser: *mut browser::MyWebBrowser,
     pub provider: *mut provider::MyServiceProvider,
+    pub rect: windows::Win32::Foundation::RECT,
 }
 
 pub struct HostWrappers {
@@ -47,6 +48,7 @@ pub fn create_host_wrappers(hwnd: HWND) -> HostWrappers {
         navigate: std::ptr::null_mut(),
         browser: std::ptr::null_mut(),
         provider: std::ptr::null_mut(),
+        rect: windows::Win32::Foundation::RECT::default(),
     }));
 
     let client_site = Box::into_raw(Box::new(MyOleClientSite {

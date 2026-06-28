@@ -736,7 +736,34 @@ impl OcxWindow {
         self.module = Some(module.clone());
         let mut host = OcxHost::new(module, clsid)?;
         setup(&mut host);
-        host.attach(self.hwnd)?;
+
+        let mut rect = RECT::default();
+        unsafe {
+            let _ = windows::Win32::UI::WindowsAndMessaging::GetClientRect(self.hwnd, &mut rect);
+        }
+        if self.parent.is_none() {
+            let rebar_h = self
+                .rebar_hwnd
+                .filter(|&r| unsafe {
+                    windows::Win32::UI::WindowsAndMessaging::IsWindowVisible(r).as_bool()
+                })
+                .map(|r| {
+                    let h = unsafe {
+                        send_message_w(
+                            r,
+                            windows::Win32::UI::Controls::RB_GETBARHEIGHT,
+                            WPARAM(0),
+                            LPARAM(0),
+                        )
+                    }
+                    .0 as i32;
+                    if h == 0 { 32 } else { h }
+                })
+                .unwrap_or(0);
+            rect.top = rebar_h;
+        }
+
+        host.attach(self.hwnd, &rect)?;
         self.host = Some(host);
         self.old_ocx_wndproc = None;
 
@@ -757,51 +784,28 @@ impl OcxWindow {
             }
         }
 
-        // Immediately resize control to prevent it from covering the toolbar
+        // Set control window position explicitly just in case
         if self.parent.is_none() {
-            unsafe {
-                let mut rect = RECT::default();
-                let _ =
-                    windows::Win32::UI::WindowsAndMessaging::GetClientRect(self.hwnd, &mut rect);
-                let rebar_h = self
-                    .rebar_hwnd
-                    .filter(|&r| unsafe {
-                        windows::Win32::UI::WindowsAndMessaging::IsWindowVisible(r).as_bool()
-                    })
-                    .map(|r| {
-                        let h = send_message_w(
-                            r,
-                            windows::Win32::UI::Controls::RB_GETBARHEIGHT,
-                            WPARAM(0),
-                            LPARAM(0),
-                        )
-                        .0 as i32;
-                        if h == 0 { 32 } else { h }
-                    })
-                    .unwrap_or(0);
-                let toolbar_offset_rect = RECT {
-                    left: 0,
-                    top: rebar_h,
-                    right: rect.right,
-                    bottom: rect.bottom,
-                };
-                let host = self.host.as_ref().unwrap();
-                let _ = host.resize(&toolbar_offset_rect);
-                if let Ok(ocx_hwnd) = host.get_control_hwnd() {
+            if let Some(host) = &self.host
+                && let Ok(ocx_hwnd) = host.get_control_hwnd()
+            {
+                unsafe {
                     let _ = windows::Win32::UI::WindowsAndMessaging::SetWindowPos(
                         ocx_hwnd,
                         None,
-                        toolbar_offset_rect.left,
-                        toolbar_offset_rect.top,
-                        toolbar_offset_rect.right - toolbar_offset_rect.left,
-                        toolbar_offset_rect.bottom - toolbar_offset_rect.top,
+                        rect.left,
+                        rect.top,
+                        rect.right - rect.left,
+                        rect.bottom - rect.top,
                         windows::Win32::UI::WindowsAndMessaging::SWP_NOZORDER
                             | windows::Win32::UI::WindowsAndMessaging::SWP_NOACTIVATE,
                     );
                 }
+            }
 
-                // Bring rebar above the OCX in z-order so it isn't covered
-                if let Some(rebar) = self.rebar_hwnd {
+            // Bring rebar above the OCX in z-order so it isn't covered
+            if let Some(rebar) = self.rebar_hwnd {
+                unsafe {
                     let _ = windows::Win32::UI::WindowsAndMessaging::SetWindowPos(
                         rebar,
                         Some(windows::Win32::UI::WindowsAndMessaging::HWND_TOP),
@@ -948,7 +952,9 @@ impl OcxWindow {
             );
 
             // 5. Attach the pre-created host to the window
-            host.attach(hwnd)?;
+            let mut client_rect = RECT::default();
+            let _ = windows::Win32::UI::WindowsAndMessaging::GetClientRect(hwnd, &mut client_rect);
+            host.attach(hwnd, &client_rect)?;
 
             let settings_win = Box::new(OcxWindow {
                 hwnd,

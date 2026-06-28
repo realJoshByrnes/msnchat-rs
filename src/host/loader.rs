@@ -5,7 +5,6 @@ use windows::{
             Com::IClassFactory,
             Ole::{IOleClientSite, IOleInPlaceObject, IOleObject, OLEIVERB_SHOW},
         },
-        UI::WindowsAndMessaging::GetClientRect,
     },
     core::{GUID, IUnknown, Interface, Result},
 };
@@ -85,9 +84,10 @@ impl OcxHost {
         }
     }
 
-    pub fn attach(&mut self, hwnd: HWND) -> Result<()> {
+    pub fn attach(&mut self, hwnd: HWND, rect: &RECT) -> Result<()> {
         unsafe {
             (*self.wrappers._shared).hwnd = hwnd;
+            (*self.wrappers._shared).rect = *rect;
 
             let client_site_raw = self.wrappers.client_site as *mut std::ffi::c_void;
             super::site::client::add_ref(client_site_raw);
@@ -107,9 +107,6 @@ impl OcxHost {
                 let _cookie = cp.Advise(&events_unk);
             }
 
-            let mut rect = RECT::default();
-            let _ = GetClientRect(hwnd, &mut rect);
-
             let mut inplace_ptr: *mut std::ffi::c_void = std::ptr::null_mut();
             let hr = self
                 .ole_object
@@ -117,7 +114,7 @@ impl OcxHost {
 
             if hr.is_ok() && !inplace_ptr.is_null() {
                 let inplace_object = IOleInPlaceObject::from_raw(inplace_ptr);
-                inplace_object.SetObjectRects(&rect, &rect)?;
+                inplace_object.SetObjectRects(rect, rect)?;
                 self.inplace_object = Some(inplace_object.clone());
             }
 
@@ -127,13 +124,16 @@ impl OcxHost {
                 &client_site,
                 0,
                 hwnd,
-                &rect,
+                rect,
             )?;
         }
         Ok(())
     }
 
     pub fn resize(&self, rect: &RECT) -> Result<()> {
+        unsafe {
+            (*self.wrappers._shared).rect = *rect;
+        }
         if let Some(inplace) = &self.inplace_object {
             unsafe {
                 inplace.SetObjectRects(rect, rect)?;
