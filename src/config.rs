@@ -58,16 +58,36 @@ pub struct SettingsConfig {
 impl SettingsConfig {
     pub fn get_value(&self, name: &str) -> Option<(u32, Vec<u8>)> {
         match name.to_lowercase().as_str() {
-            "showactivity" => self.showactivity.map(|b| (4, (b as u32).to_ne_bytes().to_vec())),
-            "showdepartures" => self.showdepartures.map(|b| (4, (b as u32).to_ne_bytes().to_vec())),
-            "showarrivals" => self.showarrivals.map(|b| (4, (b as u32).to_ne_bytes().to_vec())),
-            "disableinvites" => self.disableinvites.map(|b| (4, (b as u32).to_ne_bytes().to_vec())),
-            "disableurls" => self.disableurls.map(|b| (4, (b as u32).to_ne_bytes().to_vec())),
-            "showemoticons" => self.showemoticons.map(|b| (4, (b as u32).to_ne_bytes().to_vec())),
-            "ignorefonts" => self.ignorefonts.map(|b| (4, (b as u32).to_ne_bytes().to_vec())),
-            "playsounds" => self.playsounds.map(|b| (4, (b as u32).to_ne_bytes().to_vec())),
-            "usewhisperwindow" => self.usewhisperwindow.map(|b| (4, (b as u32).to_ne_bytes().to_vec())),
-            "disablewhisper" => self.disablewhisper.map(|b| (4, (b as u32).to_ne_bytes().to_vec())),
+            "showactivity" => self
+                .showactivity
+                .map(|b| (4, (b as u32).to_ne_bytes().to_vec())),
+            "showdepartures" => self
+                .showdepartures
+                .map(|b| (4, (b as u32).to_ne_bytes().to_vec())),
+            "showarrivals" => self
+                .showarrivals
+                .map(|b| (4, (b as u32).to_ne_bytes().to_vec())),
+            "disableinvites" => self
+                .disableinvites
+                .map(|b| (4, (b as u32).to_ne_bytes().to_vec())),
+            "disableurls" => self
+                .disableurls
+                .map(|b| (4, (b as u32).to_ne_bytes().to_vec())),
+            "showemoticons" => self
+                .showemoticons
+                .map(|b| (4, (b as u32).to_ne_bytes().to_vec())),
+            "ignorefonts" => self
+                .ignorefonts
+                .map(|b| (4, (b as u32).to_ne_bytes().to_vec())),
+            "playsounds" => self
+                .playsounds
+                .map(|b| (4, (b as u32).to_ne_bytes().to_vec())),
+            "usewhisperwindow" => self
+                .usewhisperwindow
+                .map(|b| (4, (b as u32).to_ne_bytes().to_vec())),
+            "disablewhisper" => self
+                .disablewhisper
+                .map(|b| (4, (b as u32).to_ne_bytes().to_vec())),
             "fontname" => self.fontname.as_ref().map(|s| {
                 let mut b = s.as_bytes().to_vec();
                 b.push(0);
@@ -83,13 +103,15 @@ impl SettingsConfig {
     pub fn set_value(&mut self, name: &str, value_type: u32, data: &[u8]) -> bool {
         let name_lower = name.to_lowercase();
         match name_lower.as_str() {
-            "showactivity" | "showdepartures" | "showarrivals" | "disableinvites" |
-            "disableurls" | "showemoticons" | "ignorefonts" | "playsounds" |
-            "usewhisperwindow" | "disablewhisper" => {
+            "showactivity" | "showdepartures" | "showarrivals" | "disableinvites"
+            | "disableurls" | "showemoticons" | "ignorefonts" | "playsounds"
+            | "usewhisperwindow" | "disablewhisper" => {
                 let val = if value_type == 4 && data.len() == 4 {
                     u32::from_ne_bytes([data[0], data[1], data[2], data[3]]) != 0
                 } else if value_type == 1 {
-                    let s = String::from_utf8_lossy(data).trim_end_matches('\0').to_string();
+                    let s = String::from_utf8_lossy(data)
+                        .trim_end_matches('\0')
+                        .to_string();
                     s == "1" || s.eq_ignore_ascii_case("true")
                 } else {
                     false
@@ -110,7 +132,9 @@ impl SettingsConfig {
                 true
             }
             "fontname" => {
-                let s = String::from_utf8_lossy(data).trim_end_matches('\0').to_string();
+                let s = String::from_utf8_lossy(data)
+                    .trim_end_matches('\0')
+                    .to_string();
                 self.fontname = Some(s);
                 true
             }
@@ -118,7 +142,10 @@ impl SettingsConfig {
                 let val = if value_type == 4 && data.len() == 4 {
                     u32::from_ne_bytes([data[0], data[1], data[2], data[3]])
                 } else if value_type == 1 {
-                    String::from_utf8_lossy(data).trim_end_matches('\0').parse().unwrap_or(0)
+                    String::from_utf8_lossy(data)
+                        .trim_end_matches('\0')
+                        .parse()
+                        .unwrap_or(0)
                 } else {
                     0
                 };

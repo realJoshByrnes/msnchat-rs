@@ -3,10 +3,11 @@ use windows::{
         Foundation::{HWND, LPARAM, LRESULT, RECT, WPARAM},
         System::LibraryLoader::GetModuleHandleW,
         UI::WindowsAndMessaging::{
-            AppendMenuW, CS_HREDRAW, CS_VREDRAW, CW_USEDEFAULT, CallWindowProcW, CreateMenu, CreatePopupMenu,
-            CreateWindowExW, DefWindowProcW, DispatchMessageW, GWLP_WNDPROC, GetMessageW, MF_POPUP, MF_STRING,
-            MSG, PostQuitMessage, RegisterClassW, SetMenu, TranslateMessage, WM_DESTROY, WM_SIZE,
-            WNDCLASSW, WNDPROC, WS_OVERLAPPEDWINDOW, WS_VISIBLE, CB_SETITEMHEIGHT,
+            AppendMenuW, CB_SETITEMHEIGHT, CS_HREDRAW, CS_VREDRAW, CW_USEDEFAULT, CallWindowProcW,
+            CreateMenu, CreatePopupMenu, CreateWindowExW, DefWindowProcW, DispatchMessageW,
+            GWLP_WNDPROC, GetMessageW, MF_POPUP, MF_STRING, MSG, PostQuitMessage, RegisterClassW,
+            SetMenu, TranslateMessage, WM_DESTROY, WM_SIZE, WNDCLASSW, WNDPROC,
+            WS_OVERLAPPEDWINDOW, WS_VISIBLE,
         },
     },
     core::{GUID, Result, w},
@@ -81,30 +82,23 @@ unsafe extern "system" fn rebar_wndproc(
             old_wndproc = this.old_rebar_wndproc;
         }
 
-        if message == windows::Win32::UI::WindowsAndMessaging::WM_SHOWWINDOW
-            || message == windows::Win32::UI::WindowsAndMessaging::WM_WINDOWPOSCHANGED
+        if (message == windows::Win32::UI::WindowsAndMessaging::WM_SHOWWINDOW
+            || message == windows::Win32::UI::WindowsAndMessaging::WM_WINDOWPOSCHANGED)
+            && user_data != 0
         {
-            if user_data != 0 {
-                let mut rc = RECT::default();
-                let _ = windows::Win32::UI::WindowsAndMessaging::GetClientRect(parent, &mut rc);
-                let lp = LPARAM(((rc.bottom as u32) << 16 | (rc.right as u32 & 0xFFFF)) as isize);
-                let _ = windows::Win32::UI::WindowsAndMessaging::PostMessageW(
-                    Some(parent),
-                    WM_SIZE,
-                    WPARAM(0),
-                    lp,
-                );
-            }
+            let mut rc = RECT::default();
+            let _ = windows::Win32::UI::WindowsAndMessaging::GetClientRect(parent, &mut rc);
+            let lp = LPARAM(((rc.bottom as u32) << 16 | (rc.right as u32 & 0xFFFF)) as isize);
+            let _ = windows::Win32::UI::WindowsAndMessaging::PostMessageW(
+                Some(parent),
+                WM_SIZE,
+                WPARAM(0),
+                lp,
+            );
         }
 
         if let Some(old) = old_wndproc {
-            CallWindowProcW(
-                old,
-                hwnd,
-                message,
-                wparam,
-                lparam,
-            )
+            CallWindowProcW(old, hwnd, message, wparam, lparam)
         } else {
             DefWindowProcW(hwnd, message, wparam, lparam)
         }
@@ -130,7 +124,10 @@ unsafe extern "system" fn ocx_wndproc(
             let this = &mut *(user_data as *mut OcxWindow);
             old_wndproc = this.old_ocx_wndproc;
 
-            let wm_update_settings = windows::Win32::UI::WindowsAndMessaging::RegisterWindowMessageW(w!("WM_CHAT_UPDATESETTINGS"));
+            let wm_update_settings =
+                windows::Win32::UI::WindowsAndMessaging::RegisterWindowMessageW(w!(
+                    "WM_CHAT_UPDATESETTINGS"
+                ));
             if message == wm_update_settings && wparam.0 != 2 {
                 // Forward the setting update to the parent window, flagging it so parent doesn't post it back.
                 let _ = windows::Win32::UI::WindowsAndMessaging::PostMessageW(
@@ -143,13 +140,7 @@ unsafe extern "system" fn ocx_wndproc(
         }
 
         if let Some(old) = old_wndproc {
-            CallWindowProcW(
-                old,
-                hwnd,
-                message,
-                wparam,
-                lparam,
-            )
+            CallWindowProcW(old, hwnd, message, wparam, lparam)
         } else {
             DefWindowProcW(hwnd, message, wparam, lparam)
         }
@@ -355,12 +346,7 @@ impl OcxWindow {
 
             // Set height of selection fields to match the buttons (24px)
             // (cb_font is owner-draw and gets measured to 24px automatically in WM_MEASUREITEM)
-            let _ = send_message_w(
-                cb_charset,
-                CB_SETITEMHEIGHT,
-                WPARAM(usize::MAX),
-                LPARAM(24),
-            );
+            let _ = send_message_w(cb_charset, CB_SETITEMHEIGHT, WPARAM(usize::MAX), LPARAM(24));
 
             let btn_color = CreateWindowExW(
                 windows::Win32::UI::WindowsAndMessaging::WINDOW_EX_STYLE::default(),
@@ -468,15 +454,15 @@ impl OcxWindow {
 
             let hfont_normal = windows::Win32::Graphics::Gdi::CreateFontIndirectW(&lf);
 
-            let mut lf_bold = lf.clone();
+            let mut lf_bold = lf;
             lf_bold.lfWeight = windows::Win32::Graphics::Gdi::FW_BOLD.0 as i32;
             let hfont_bold = windows::Win32::Graphics::Gdi::CreateFontIndirectW(&lf_bold);
 
-            let mut lf_italic = lf.clone();
+            let mut lf_italic = lf;
             lf_italic.lfItalic = 1; // TRUE
             let hfont_italic = windows::Win32::Graphics::Gdi::CreateFontIndirectW(&lf_italic);
 
-            let mut lf_underline = lf.clone();
+            let mut lf_underline = lf;
             lf_underline.lfUnderline = 1; // TRUE
             let hfont_underline = windows::Win32::Graphics::Gdi::CreateFontIndirectW(&lf_underline);
 
@@ -692,10 +678,8 @@ impl OcxWindow {
             }
 
             // Subclass the rebar
-            let old_wndproc_val = windows::Win32::UI::WindowsAndMessaging::GetWindowLongW(
-                rebar,
-                GWLP_WNDPROC,
-            );
+            let old_wndproc_val =
+                windows::Win32::UI::WindowsAndMessaging::GetWindowLongW(rebar, GWLP_WNDPROC);
             let old_rebar_wndproc: WNDPROC = std::mem::transmute(old_wndproc_val as isize);
             windows::Win32::UI::WindowsAndMessaging::SetWindowLongW(
                 rebar,
@@ -757,21 +741,19 @@ impl OcxWindow {
         self.old_ocx_wndproc = None;
 
         // Subclass the OCX control window to monitor settings changes
-        if let Some(host) = &self.host {
-            if let Ok(ocx_hwnd) = host.get_control_hwnd() {
-                unsafe {
-                    let old_wndproc_val = windows::Win32::UI::WindowsAndMessaging::GetWindowLongW(
-                        ocx_hwnd,
-                        GWLP_WNDPROC,
-                    );
-                    let old_ocx_wndproc: WNDPROC = std::mem::transmute(old_wndproc_val as isize);
-                    windows::Win32::UI::WindowsAndMessaging::SetWindowLongW(
-                        ocx_hwnd,
-                        GWLP_WNDPROC,
-                        ocx_wndproc as *const () as isize as i32,
-                    );
-                    self.old_ocx_wndproc = Some(old_ocx_wndproc);
-                }
+        if let Some(host) = &self.host
+            && let Ok(ocx_hwnd) = host.get_control_hwnd()
+        {
+            unsafe {
+                let old_wndproc_val =
+                    windows::Win32::UI::WindowsAndMessaging::GetWindowLongW(ocx_hwnd, GWLP_WNDPROC);
+                let old_ocx_wndproc: WNDPROC = std::mem::transmute(old_wndproc_val as isize);
+                windows::Win32::UI::WindowsAndMessaging::SetWindowLongW(
+                    ocx_hwnd,
+                    GWLP_WNDPROC,
+                    ocx_wndproc as *const () as isize as i32,
+                );
+                self.old_ocx_wndproc = Some(old_ocx_wndproc);
             }
         }
 
@@ -783,7 +765,9 @@ impl OcxWindow {
                     windows::Win32::UI::WindowsAndMessaging::GetClientRect(self.hwnd, &mut rect);
                 let rebar_h = self
                     .rebar_hwnd
-                    .filter(|&r| unsafe { windows::Win32::UI::WindowsAndMessaging::IsWindowVisible(r).as_bool() })
+                    .filter(|&r| unsafe {
+                        windows::Win32::UI::WindowsAndMessaging::IsWindowVisible(r).as_bool()
+                    })
                     .map(|r| {
                         let h = send_message_w(
                             r,
@@ -1010,9 +994,13 @@ impl OcxWindow {
 
             if user_data != 0 {
                 let this = &mut *(user_data as *mut Self);
-                let wm_update_settings = windows::Win32::UI::WindowsAndMessaging::RegisterWindowMessageW(w!("WM_CHAT_UPDATESETTINGS"));
+                let wm_update_settings =
+                    windows::Win32::UI::WindowsAndMessaging::RegisterWindowMessageW(w!(
+                        "WM_CHAT_UPDATESETTINGS"
+                    ));
                 if message == wm_update_settings {
-                    let manager = crate::config::MSNConfigManager::new(std::path::Path::new("config.toml"));
+                    let manager =
+                        crate::config::MSNConfigManager::new(std::path::Path::new("config.toml"));
                     if let Ok(config) = manager.load() {
                         // 1. Update font combo
                         let full_font_name = config
@@ -1043,7 +1031,11 @@ impl OcxWindow {
                                     WPARAM(idx as usize),
                                     LPARAM(0),
                                 );
-                                let _ = windows::Win32::Graphics::Gdi::InvalidateRect(Some(cb_font), None, true);
+                                let _ = windows::Win32::Graphics::Gdi::InvalidateRect(
+                                    Some(cb_font),
+                                    None,
+                                    true,
+                                );
                             }
                         }
 
@@ -1107,21 +1099,24 @@ impl OcxWindow {
 
                         // 4. Redraw color button
                         if let Some(btn_color) = this.btn_color {
-                            let _ = windows::Win32::Graphics::Gdi::InvalidateRect(Some(btn_color), None, true);
+                            let _ = windows::Win32::Graphics::Gdi::InvalidateRect(
+                                Some(btn_color),
+                                None,
+                                true,
+                            );
                         }
 
                         // 5. Forward to OCX if it did not come from OCX subclass
-                        if wparam.0 != 1 {
-                            if let Some(host) = &this.host
-                                && let Ok(hwnd_control) = host.get_control_hwnd()
-                            {
-                                let _ = windows::Win32::UI::WindowsAndMessaging::PostMessageW(
-                                    Some(hwnd_control),
-                                    wm_update_settings,
-                                    WPARAM(2), // Flag: came from parent
-                                    lparam,
-                                );
-                            }
+                        if wparam.0 != 1
+                            && let Some(host) = &this.host
+                            && let Ok(hwnd_control) = host.get_control_hwnd()
+                        {
+                            let _ = windows::Win32::UI::WindowsAndMessaging::PostMessageW(
+                                Some(hwnd_control),
+                                wm_update_settings,
+                                WPARAM(2), // Flag: came from parent
+                                lparam,
+                            );
                         }
                     }
                     return LRESULT(0);
@@ -1311,7 +1306,10 @@ impl OcxWindow {
                                 // Position OCX below the rebar
                                 let rebar_h = this
                                     .rebar_hwnd
-                                    .filter(|&r| unsafe { windows::Win32::UI::WindowsAndMessaging::IsWindowVisible(r).as_bool() })
+                                    .filter(|&r| unsafe {
+                                        windows::Win32::UI::WindowsAndMessaging::IsWindowVisible(r)
+                                            .as_bool()
+                                    })
                                     .map(|r| {
                                         let h = send_message_w(
                                             r,

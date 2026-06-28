@@ -380,7 +380,9 @@ unsafe extern "system" fn detour_reg_query_value_ex_a(
                             }
                         }
                         return 0;
-                    } else if let Some((value_type, data_bytes)) = config.settings.get_value(val_name) {
+                    } else if let Some((value_type, data_bytes)) =
+                        config.settings.get_value(val_name)
+                    {
                         if !lp_type.is_null() {
                             unsafe { *lp_type = value_type };
                         }
@@ -389,7 +391,11 @@ unsafe extern "system" fn detour_reg_query_value_ex_a(
                             unsafe { *lpcb_data = data_bytes.len() as u32 };
                             if !lp_data.is_null() && max_len >= data_bytes.len() {
                                 unsafe {
-                                    std::ptr::copy_nonoverlapping(data_bytes.as_ptr(), lp_data, data_bytes.len());
+                                    std::ptr::copy_nonoverlapping(
+                                        data_bytes.as_ptr(),
+                                        lp_data,
+                                        data_bytes.len(),
+                                    );
                                 }
                             }
                         }

@@ -146,7 +146,9 @@ impl OcxHost {
         if let Some(inplace) = &self.inplace_object {
             unsafe { inplace.GetWindow() }
         } else {
-            Err(windows::core::Error::from_hresult(windows::core::HRESULT(E_FAIL.0)))
+            Err(windows::core::Error::from_hresult(windows::core::HRESULT(
+                E_FAIL.0,
+            )))
         }
     }
 
