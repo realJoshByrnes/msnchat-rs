@@ -6,7 +6,7 @@ use windows::{
             AppendMenuW, CS_HREDRAW, CS_VREDRAW, CW_USEDEFAULT, CallWindowProcW, CreateMenu, CreatePopupMenu,
             CreateWindowExW, DefWindowProcW, DispatchMessageW, GWLP_WNDPROC, GetMessageW, MF_POPUP, MF_STRING,
             MSG, PostQuitMessage, RegisterClassW, SetMenu, TranslateMessage, WM_DESTROY, WM_SIZE,
-            WNDCLASSW, WNDPROC, WS_OVERLAPPEDWINDOW, WS_VISIBLE,
+            WNDCLASSW, WNDPROC, WS_OVERLAPPEDWINDOW, WS_VISIBLE, CB_SETITEMHEIGHT,
         },
     },
     core::{GUID, Result, w},
@@ -111,6 +111,51 @@ unsafe extern "system" fn rebar_wndproc(
     }
 }
 
+unsafe extern "system" fn ocx_wndproc(
+    hwnd: HWND,
+    message: u32,
+    wparam: WPARAM,
+    lparam: LPARAM,
+) -> LRESULT {
+    unsafe {
+        let Ok(parent) = windows::Win32::UI::WindowsAndMessaging::GetParent(hwnd) else {
+            return DefWindowProcW(hwnd, message, wparam, lparam);
+        };
+        let user_data = windows::Win32::UI::WindowsAndMessaging::GetWindowLongW(
+            parent,
+            windows::Win32::UI::WindowsAndMessaging::GWLP_USERDATA,
+        );
+        let mut old_wndproc: Option<WNDPROC> = None;
+        if user_data != 0 {
+            let this = &mut *(user_data as *mut OcxWindow);
+            old_wndproc = this.old_ocx_wndproc;
+
+            let wm_update_settings = windows::Win32::UI::WindowsAndMessaging::RegisterWindowMessageW(w!("WM_CHAT_UPDATESETTINGS"));
+            if message == wm_update_settings && wparam.0 != 2 {
+                // Forward the setting update to the parent window, flagging it so parent doesn't post it back.
+                let _ = windows::Win32::UI::WindowsAndMessaging::PostMessageW(
+                    Some(parent),
+                    wm_update_settings,
+                    WPARAM(1), // Flag: came from OCX subclass
+                    lparam,
+                );
+            }
+        }
+
+        if let Some(old) = old_wndproc {
+            CallWindowProcW(
+                old,
+                hwnd,
+                message,
+                wparam,
+                lparam,
+            )
+        } else {
+            DefWindowProcW(hwnd, message, wparam, lparam)
+        }
+    }
+}
+
 pub struct OcxWindow {
     hwnd: HWND,
     host: Option<OcxHost>,
@@ -122,9 +167,13 @@ pub struct OcxWindow {
     btn_color: Option<HWND>,
     btn_bold: Option<HWND>,
     btn_italic: Option<HWND>,
+    btn_underline: Option<HWND>,
     hfont_bold: Option<windows::Win32::Graphics::Gdi::HFONT>,
     hfont_italic: Option<windows::Win32::Graphics::Gdi::HFONT>,
+    hfont_underline: Option<windows::Win32::Graphics::Gdi::HFONT>,
+    hfont_normal: Option<windows::Win32::Graphics::Gdi::HFONT>,
     old_rebar_wndproc: Option<WNDPROC>,
+    old_ocx_wndproc: Option<WNDPROC>,
 }
 
 impl OcxWindow {
@@ -199,8 +248,11 @@ impl OcxWindow {
             btn_color,
             btn_bold,
             btn_italic,
+            btn_underline,
             hfont_bold,
             hfont_italic,
+            hfont_underline,
+            hfont_normal,
             old_rebar_wndproc,
         ) = unsafe {
             // Create the rebar control
@@ -301,6 +353,15 @@ impl OcxWindow {
                 None,
             )?;
 
+            // Set height of selection fields to match the buttons (24px)
+            // (cb_font is owner-draw and gets measured to 24px automatically in WM_MEASUREITEM)
+            let _ = send_message_w(
+                cb_charset,
+                CB_SETITEMHEIGHT,
+                WPARAM(usize::MAX),
+                LPARAM(24),
+            );
+
             let btn_color = CreateWindowExW(
                 windows::Win32::UI::WindowsAndMessaging::WINDOW_EX_STYLE::default(),
                 w!("BUTTON"),
@@ -313,7 +374,7 @@ impl OcxWindow {
                 285,
                 2,
                 26,
-                22, // Positioned on toolbar
+                24, // Positioned on toolbar (24px height)
                 Some(toolbar),
                 Some(windows::Win32::UI::WindowsAndMessaging::HMENU(
                     2005 as *mut std::ffi::c_void,
@@ -335,7 +396,7 @@ impl OcxWindow {
                 316,
                 2,
                 26,
-                22, // Positioned on toolbar
+                24, // Positioned on toolbar (24px height)
                 Some(toolbar),
                 Some(windows::Win32::UI::WindowsAndMessaging::HMENU(
                     2003 as *mut std::ffi::c_void,
@@ -357,7 +418,7 @@ impl OcxWindow {
                 347,
                 2,
                 26,
-                22, // Positioned on toolbar
+                24, // Positioned on toolbar (24px height)
                 Some(toolbar),
                 Some(windows::Win32::UI::WindowsAndMessaging::HMENU(
                     2004 as *mut std::ffi::c_void,
@@ -366,29 +427,46 @@ impl OcxWindow {
                 None,
             )?;
 
-            // Set GUI font
+            let btn_underline = CreateWindowExW(
+                windows::Win32::UI::WindowsAndMessaging::WINDOW_EX_STYLE::default(),
+                w!("BUTTON"),
+                w!("U"),
+                windows::Win32::UI::WindowsAndMessaging::WINDOW_STYLE(
+                    windows::Win32::UI::WindowsAndMessaging::WS_CHILD.0
+                        | windows::Win32::UI::WindowsAndMessaging::WS_VISIBLE.0
+                        | windows::Win32::UI::WindowsAndMessaging::BS_AUTOCHECKBOX as u32
+                        | windows::Win32::UI::WindowsAndMessaging::BS_PUSHLIKE as u32,
+                ),
+                378,
+                2,
+                26,
+                24, // Positioned on toolbar (24px height)
+                Some(toolbar),
+                Some(windows::Win32::UI::WindowsAndMessaging::HMENU(
+                    2006 as *mut std::ffi::c_void,
+                )),
+                Some(instance.into()),
+                None,
+            )?;
+
+            // Create bold, italic, underline, and normal fonts with height -14 to match the font dropdown
             let gui_font = windows::Win32::Graphics::Gdi::GetStockObject(
                 windows::Win32::Graphics::Gdi::DEFAULT_GUI_FONT,
             );
-            let _ = send_message_w(
-                cb_font,
-                windows::Win32::UI::WindowsAndMessaging::WM_SETFONT,
-                WPARAM(gui_font.0 as usize),
-                LPARAM(0),
-            );
-            let _ = send_message_w(
-                cb_charset,
-                windows::Win32::UI::WindowsAndMessaging::WM_SETFONT,
-                WPARAM(gui_font.0 as usize),
-                LPARAM(0),
-            );
-            // Create bold and italic fonts for the style buttons
             let mut lf: windows::Win32::Graphics::Gdi::LOGFONTW = std::mem::zeroed();
             windows::Win32::Graphics::Gdi::GetObjectW(
                 gui_font,
                 std::mem::size_of::<windows::Win32::Graphics::Gdi::LOGFONTW>() as i32,
                 Some(&mut lf as *mut _ as *mut std::ffi::c_void),
             );
+
+            lf.lfHeight = -14;
+            let font_name = w!("Tahoma");
+            let copy_len = font_name.len().min(lf.lfFaceName.len() - 1);
+            lf.lfFaceName[..copy_len].copy_from_slice(font_name.as_wide());
+            lf.lfFaceName[copy_len] = 0;
+
+            let hfont_normal = windows::Win32::Graphics::Gdi::CreateFontIndirectW(&lf);
 
             let mut lf_bold = lf.clone();
             lf_bold.lfWeight = windows::Win32::Graphics::Gdi::FW_BOLD.0 as i32;
@@ -397,6 +475,23 @@ impl OcxWindow {
             let mut lf_italic = lf.clone();
             lf_italic.lfItalic = 1; // TRUE
             let hfont_italic = windows::Win32::Graphics::Gdi::CreateFontIndirectW(&lf_italic);
+
+            let mut lf_underline = lf.clone();
+            lf_underline.lfUnderline = 1; // TRUE
+            let hfont_underline = windows::Win32::Graphics::Gdi::CreateFontIndirectW(&lf_underline);
+
+            let _ = send_message_w(
+                cb_font,
+                windows::Win32::UI::WindowsAndMessaging::WM_SETFONT,
+                WPARAM(hfont_normal.0 as usize),
+                LPARAM(0),
+            );
+            let _ = send_message_w(
+                cb_charset,
+                windows::Win32::UI::WindowsAndMessaging::WM_SETFONT,
+                WPARAM(hfont_normal.0 as usize),
+                LPARAM(0),
+            );
 
             let _ = send_message_w(
                 btn_bold,
@@ -408,6 +503,12 @@ impl OcxWindow {
                 btn_italic,
                 windows::Win32::UI::WindowsAndMessaging::WM_SETFONT,
                 WPARAM(hfont_italic.0 as usize),
+                LPARAM(1), // Redraw
+            );
+            let _ = send_message_w(
+                btn_underline,
+                windows::Win32::UI::WindowsAndMessaging::WM_SETFONT,
+                WPARAM(hfont_underline.0 as usize),
                 LPARAM(1), // Redraw
             );
 
@@ -537,6 +638,7 @@ impl OcxWindow {
             let fontstyle = config.settings.fontstyle.unwrap_or(0);
             let bold_checked = (fontstyle & 1) != 0;
             let italic_checked = (fontstyle & 2) != 0;
+            let underline_checked = (fontstyle & 4) != 0;
 
             let _ = send_message_w(
                 btn_bold,
@@ -548,6 +650,12 @@ impl OcxWindow {
                 btn_italic,
                 windows::Win32::UI::WindowsAndMessaging::BM_SETCHECK,
                 WPARAM(if italic_checked { 1 } else { 0 }),
+                LPARAM(0),
+            );
+            let _ = send_message_w(
+                btn_underline,
+                windows::Win32::UI::WindowsAndMessaging::BM_SETCHECK,
+                WPARAM(if underline_checked { 1 } else { 0 }),
                 LPARAM(0),
             );
 
@@ -563,9 +671,9 @@ impl OcxWindow {
                     | windows::Win32::UI::Controls::RBBIM_SIZE,
                 fStyle: windows::Win32::UI::Controls::RBBS_CHILDEDGE,
                 hwndChild: toolbar,
-                cxMinChild: 400, // Approx width of all controls
-                cyMinChild: 26,  // Approx height of controls
-                cx: 400,
+                cxMinChild: 430, // Approx width of all controls
+                cyMinChild: 28,  // Approx height of controls (height 24 + padding)
+                cx: 430,
                 ..Default::default()
             };
             let _ = send_message_w(
@@ -602,8 +710,11 @@ impl OcxWindow {
                 Some(btn_color),
                 Some(btn_bold),
                 Some(btn_italic),
+                Some(btn_underline),
                 hfont_bold,
                 hfont_italic,
+                hfont_underline,
+                hfont_normal,
                 Some(old_rebar_wndproc),
             )
         };
@@ -619,9 +730,13 @@ impl OcxWindow {
             btn_color,
             btn_bold,
             btn_italic,
+            btn_underline,
             hfont_bold: Some(hfont_bold),
             hfont_italic: Some(hfont_italic),
+            hfont_underline: Some(hfont_underline),
+            hfont_normal: Some(hfont_normal),
             old_rebar_wndproc,
+            old_ocx_wndproc: None,
         })
     }
 
@@ -639,6 +754,26 @@ impl OcxWindow {
         setup(&mut host);
         host.attach(self.hwnd)?;
         self.host = Some(host);
+        self.old_ocx_wndproc = None;
+
+        // Subclass the OCX control window to monitor settings changes
+        if let Some(host) = &self.host {
+            if let Ok(ocx_hwnd) = host.get_control_hwnd() {
+                unsafe {
+                    let old_wndproc_val = windows::Win32::UI::WindowsAndMessaging::GetWindowLongW(
+                        ocx_hwnd,
+                        GWLP_WNDPROC,
+                    );
+                    let old_ocx_wndproc: WNDPROC = std::mem::transmute(old_wndproc_val as isize);
+                    windows::Win32::UI::WindowsAndMessaging::SetWindowLongW(
+                        ocx_hwnd,
+                        GWLP_WNDPROC,
+                        ocx_wndproc as *const () as isize as i32,
+                    );
+                    self.old_ocx_wndproc = Some(old_ocx_wndproc);
+                }
+            }
+        }
 
         // Immediately resize control to prevent it from covering the toolbar
         if self.parent.is_none() {
@@ -842,9 +977,13 @@ impl OcxWindow {
                 btn_color: None,
                 btn_bold: None,
                 btn_italic: None,
+                btn_underline: None,
                 hfont_bold: None,
                 hfont_italic: None,
+                hfont_underline: None,
+                hfont_normal: None,
                 old_rebar_wndproc: None,
+                old_ocx_wndproc: None,
             });
 
             // Leak the box pointer into GWLP_USERDATA
@@ -871,12 +1010,129 @@ impl OcxWindow {
 
             if user_data != 0 {
                 let this = &mut *(user_data as *mut Self);
+                let wm_update_settings = windows::Win32::UI::WindowsAndMessaging::RegisterWindowMessageW(w!("WM_CHAT_UPDATESETTINGS"));
+                if message == wm_update_settings {
+                    let manager = crate::config::MSNConfigManager::new(std::path::Path::new("config.toml"));
+                    if let Ok(config) = manager.load() {
+                        // 1. Update font combo
+                        let full_font_name = config
+                            .settings
+                            .fontname
+                            .clone()
+                            .unwrap_or_else(|| "Tahoma;0".to_string());
+                        let parts: Vec<&str> = full_font_name.split(';').collect();
+                        let font_family = parts.first().copied().unwrap_or("Tahoma");
+                        let charset_val = parts
+                            .get(1)
+                            .and_then(|s| s.parse::<u32>().ok())
+                            .unwrap_or(0);
+
+                        if let Some(cb_font) = this.cb_font {
+                            let font_wstr = windows::core::HSTRING::from(font_family);
+                            let idx = send_message_w(
+                                cb_font,
+                                windows::Win32::UI::WindowsAndMessaging::CB_FINDSTRINGEXACT,
+                                WPARAM(usize::MAX),
+                                LPARAM(font_wstr.as_ptr() as isize),
+                            )
+                            .0 as i32;
+                            if idx >= 0 {
+                                let _ = send_message_w(
+                                    cb_font,
+                                    windows::Win32::UI::WindowsAndMessaging::CB_SETCURSEL,
+                                    WPARAM(idx as usize),
+                                    LPARAM(0),
+                                );
+                                let _ = windows::Win32::Graphics::Gdi::InvalidateRect(Some(cb_font), None, true);
+                            }
+                        }
+
+                        // 2. Update charset combo
+                        if let Some(cb_charset) = this.cb_charset {
+                            let mut charset_idx = 0;
+                            loop {
+                                let val = send_message_w(
+                                    cb_charset,
+                                    windows::Win32::UI::WindowsAndMessaging::CB_GETITEMDATA,
+                                    WPARAM(charset_idx),
+                                    LPARAM(0),
+                                )
+                                .0 as i32;
+                                if val == -1 {
+                                    break;
+                                }
+                                if val == charset_val as i32 {
+                                    let _ = send_message_w(
+                                        cb_charset,
+                                        windows::Win32::UI::WindowsAndMessaging::CB_SETCURSEL,
+                                        WPARAM(charset_idx),
+                                        LPARAM(0),
+                                    );
+                                    break;
+                                }
+                                charset_idx += 1;
+                            }
+                        }
+
+                        // 3. Update style buttons
+                        let fontstyle = config.settings.fontstyle.unwrap_or(0);
+                        let bold_checked = (fontstyle & 1) != 0;
+                        let italic_checked = (fontstyle & 2) != 0;
+                        let underline_checked = (fontstyle & 4) != 0;
+
+                        if let Some(btn_bold) = this.btn_bold {
+                            let _ = send_message_w(
+                                btn_bold,
+                                windows::Win32::UI::WindowsAndMessaging::BM_SETCHECK,
+                                WPARAM(if bold_checked { 1 } else { 0 }),
+                                LPARAM(0),
+                            );
+                        }
+                        if let Some(btn_italic) = this.btn_italic {
+                            let _ = send_message_w(
+                                btn_italic,
+                                windows::Win32::UI::WindowsAndMessaging::BM_SETCHECK,
+                                WPARAM(if italic_checked { 1 } else { 0 }),
+                                LPARAM(0),
+                            );
+                        }
+                        if let Some(btn_underline) = this.btn_underline {
+                            let _ = send_message_w(
+                                btn_underline,
+                                windows::Win32::UI::WindowsAndMessaging::BM_SETCHECK,
+                                WPARAM(if underline_checked { 1 } else { 0 }),
+                                LPARAM(0),
+                            );
+                        }
+
+                        // 4. Redraw color button
+                        if let Some(btn_color) = this.btn_color {
+                            let _ = windows::Win32::Graphics::Gdi::InvalidateRect(Some(btn_color), None, true);
+                        }
+
+                        // 5. Forward to OCX if it did not come from OCX subclass
+                        if wparam.0 != 1 {
+                            if let Some(host) = &this.host
+                                && let Ok(hwnd_control) = host.get_control_hwnd()
+                            {
+                                let _ = windows::Win32::UI::WindowsAndMessaging::PostMessageW(
+                                    Some(hwnd_control),
+                                    wm_update_settings,
+                                    WPARAM(2), // Flag: came from parent
+                                    lparam,
+                                );
+                            }
+                        }
+                    }
+                    return LRESULT(0);
+                }
+
                 match message {
                     windows::Win32::UI::WindowsAndMessaging::WM_MEASUREITEM => {
                         let mi = &mut *(lparam.0
                             as *mut windows::Win32::UI::Controls::MEASUREITEMSTRUCT);
                         if mi.CtlID == 2001 {
-                            mi.itemHeight = 22;
+                            mi.itemHeight = 24;
                             return LRESULT(1);
                         }
                     }
@@ -1274,8 +1530,17 @@ impl OcxWindow {
                                 )
                                 .0 == 1;
 
+                                let underline_checked = send_message_w(
+                                    this.btn_underline.unwrap(),
+                                    windows::Win32::UI::WindowsAndMessaging::BM_GETCHECK,
+                                    WPARAM(0),
+                                    LPARAM(0),
+                                )
+                                .0 == 1;
+
                                 let fontstyle = (if bold_checked { 1 } else { 0 })
-                                    | (if italic_checked { 2 } else { 0 });
+                                    | (if italic_checked { 2 } else { 0 })
+                                    | (if underline_checked { 4 } else { 0 });
                                 let fontname_comb = format!("{};{}", font_name, charset_val);
 
                                 if let Ok(mut config) = manager.load() {
@@ -1297,10 +1562,10 @@ impl OcxWindow {
                                     );
                                 }
                             }
-                            2003 | 2004
+                            2003 | 2004 | 2006
                                 if code == windows::Win32::UI::WindowsAndMessaging::BN_CLICKED =>
                             {
-                                // Bold/Italic buttons — read all state and save
+                                // Bold/Italic/Underline buttons — read all state and save
                                 let mut font_name_buf = [0u16; 128];
                                 let font_idx = send_message_w(
                                     this.cb_font.unwrap(),
@@ -1372,8 +1637,17 @@ impl OcxWindow {
                                 )
                                 .0 == 1;
 
+                                let underline_checked = send_message_w(
+                                    this.btn_underline.unwrap(),
+                                    windows::Win32::UI::WindowsAndMessaging::BM_GETCHECK,
+                                    WPARAM(0),
+                                    LPARAM(0),
+                                )
+                                .0 == 1;
+
                                 let fontstyle = (if bold_checked { 1 } else { 0 })
-                                    | (if italic_checked { 2 } else { 0 });
+                                    | (if italic_checked { 2 } else { 0 })
+                                    | (if underline_checked { 4 } else { 0 });
                                 let fontname_comb = format!("{};{}", font_name, charset_val);
 
                                 if let Ok(mut config) = manager.load() {
@@ -1444,6 +1718,16 @@ impl Drop for OcxWindow {
             }
         }
         if let Some(hfont) = self.hfont_italic.take() {
+            unsafe {
+                let _ = windows::Win32::Graphics::Gdi::DeleteObject(hfont.into());
+            }
+        }
+        if let Some(hfont) = self.hfont_underline.take() {
+            unsafe {
+                let _ = windows::Win32::Graphics::Gdi::DeleteObject(hfont.into());
+            }
+        }
+        if let Some(hfont) = self.hfont_normal.take() {
             unsafe {
                 let _ = windows::Win32::Graphics::Gdi::DeleteObject(hfont.into());
             }
