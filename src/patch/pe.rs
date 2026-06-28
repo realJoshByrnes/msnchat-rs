@@ -293,6 +293,9 @@ impl ManualModule {
             if let Err(e) = crate::patch::network::apply(&module_info) {
                 log::error!("Failed to apply socket patches: {}", e);
             }
+            if let Err(e) = crate::patch::command_patch::apply(&module_info) {
+                log::error!("Failed to apply command patches: {}", e);
+            }
             if let Err(e) = crate::patch::registry_hook::apply(&module_info) {
                 log::error!("Failed to apply registry patches: {}", e);
             }

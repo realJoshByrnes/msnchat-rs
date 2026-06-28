@@ -41,6 +41,9 @@ unsafe extern "system" fn h_load_library_w(lp_lib_file_name: PCWSTR) -> HMODULE 
             if let Err(e) = unsafe { crate::patch::network::apply(&module_info) } {
                 log::error!("Failed to apply socket patches: {}", e);
             }
+            if let Err(e) = unsafe { crate::patch::command_patch::apply(&module_info) } {
+                log::error!("Failed to apply command patches: {}", e);
+            }
             if let Err(e) = unsafe { crate::patch::registry_hook::apply(&module_info) } {
                 log::error!("Failed to apply registry patches: {}", e);
             }
