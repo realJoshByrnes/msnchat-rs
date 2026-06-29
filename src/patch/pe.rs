@@ -299,6 +299,9 @@ impl ManualModule {
             if let Err(e) = crate::patch::registry_hook::apply(&module_info) {
                 log::error!("Failed to apply registry patches: {}", e);
             }
+            if let Err(e) = crate::patch::charset_patch::apply(&module_info) {
+                log::error!("Failed to apply charset patches: {}", e);
+            }
 
             // Apply queued hooks
             if let Err(status) = minhook::MinHook::apply_queued() {

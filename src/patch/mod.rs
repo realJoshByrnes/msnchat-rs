@@ -2,6 +2,7 @@ use minhook::MinHook;
 use std::ffi::c_void;
 
 pub mod channel;
+pub mod charset_patch;
 pub mod command_patch;
 pub mod directory;
 pub mod font_style_patch;
