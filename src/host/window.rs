@@ -62,6 +62,112 @@ unsafe extern "system" fn enum_font_fam_ex_proc(
     }
 }
 
+unsafe extern "system" fn enum_font_charset_proc(
+    lpelfe: *const windows::Win32::Graphics::Gdi::LOGFONTW,
+    _lpntme: *const windows::Win32::Graphics::Gdi::TEXTMETRICW,
+    _fonttype: u32,
+    lparam: LPARAM,
+) -> i32 {
+    let cb_charset = HWND(lparam.0 as *mut std::ffi::c_void);
+    unsafe {
+        let ptr_u16 = lpelfe as *const u16;
+        let script_ptr = ptr_u16.add(142);
+        let mut len = 0;
+        while *script_ptr.add(len) != 0 && len < 32 {
+            len += 1;
+        }
+        let script_slice = std::slice::from_raw_parts(script_ptr, len);
+        let script_name = String::from_utf16_lossy(script_slice);
+        let charset_val = (*lpelfe).lfCharSet;
+
+        let count = send_message_w(
+            cb_charset,
+            windows::Win32::UI::WindowsAndMessaging::CB_GETCOUNT,
+            WPARAM(0),
+            LPARAM(0),
+        )
+        .0 as i32;
+
+        let mut exists = false;
+        for idx in 0..count {
+            let data = send_message_w(
+                cb_charset,
+                windows::Win32::UI::WindowsAndMessaging::CB_GETITEMDATA,
+                WPARAM(idx as usize),
+                LPARAM(0),
+            )
+            .0 as i32;
+            if data == charset_val.0 as i32 {
+                exists = true;
+                break;
+            }
+        }
+
+        if !exists {
+            let name_hstr = windows::core::HSTRING::from(script_name);
+            let idx = send_message_w(
+                cb_charset,
+                windows::Win32::UI::WindowsAndMessaging::CB_ADDSTRING,
+                WPARAM(0),
+                LPARAM(name_hstr.as_ptr() as isize),
+            )
+            .0 as usize;
+
+            let _ = send_message_w(
+                cb_charset,
+                windows::Win32::UI::WindowsAndMessaging::CB_SETITEMDATA,
+                WPARAM(idx),
+                LPARAM(charset_val.0 as isize),
+            );
+        }
+    }
+    1
+}
+
+fn update_charset_list(cb_charset: HWND, font_family: &str) {
+    unsafe {
+        let _ = send_message_w(
+            cb_charset,
+            windows::Win32::UI::WindowsAndMessaging::CB_RESETCONTENT,
+            WPARAM(0),
+            LPARAM(0),
+        );
+
+        let name_default = w!("Default");
+        let idx = send_message_w(
+            cb_charset,
+            windows::Win32::UI::WindowsAndMessaging::CB_ADDSTRING,
+            WPARAM(0),
+            LPARAM(name_default.as_ptr() as isize),
+        )
+        .0 as usize;
+        let _ = send_message_w(
+            cb_charset,
+            windows::Win32::UI::WindowsAndMessaging::CB_SETITEMDATA,
+            WPARAM(idx),
+            LPARAM(1),
+        );
+
+        let hdc = windows::Win32::Graphics::Gdi::GetDC(None);
+        let mut lf = windows::Win32::Graphics::Gdi::LOGFONTW::default();
+        lf.lfCharSet = windows::Win32::Graphics::Gdi::DEFAULT_CHARSET;
+
+        let font_wstr: Vec<u16> = font_family.encode_utf16().collect();
+        let copy_len = font_wstr.len().min(lf.lfFaceName.len() - 1);
+        lf.lfFaceName[..copy_len].copy_from_slice(&font_wstr[..copy_len]);
+
+        let _ = windows::Win32::Graphics::Gdi::EnumFontFamiliesExW(
+            hdc,
+            &lf,
+            Some(enum_font_charset_proc),
+            LPARAM(cb_charset.0 as isize),
+            0,
+        );
+
+        let _ = windows::Win32::Graphics::Gdi::ReleaseDC(None, hdc);
+    }
+}
+
 unsafe extern "system" fn rebar_wndproc(
     hwnd: HWND,
     message: u32,
@@ -329,6 +435,7 @@ impl OcxWindow {
                     windows::Win32::UI::WindowsAndMessaging::WS_CHILD.0
                         | windows::Win32::UI::WindowsAndMessaging::WS_VISIBLE.0
                         | windows::Win32::UI::WindowsAndMessaging::CBS_DROPDOWNLIST as u32
+                        | windows::Win32::UI::WindowsAndMessaging::WS_VSCROLL.0
                         | windows::Win32::UI::WindowsAndMessaging::WS_TABSTOP.0,
                 ),
                 160,
@@ -497,6 +604,23 @@ impl OcxWindow {
                 LPARAM(1), // Redraw
             );
 
+            // Load from config
+            let manager = crate::config::MSNConfigManager::new(std::path::Path::new("config.toml"));
+            let config = manager.load().unwrap_or_default();
+
+            // Fontname config format: "<fontfamily>;<charset>"
+            let full_font_name = config
+                .settings
+                .fontname
+                .clone()
+                .unwrap_or_else(|| "Tahoma;1".to_string());
+            let parts: Vec<&str> = full_font_name.split(';').collect();
+            let font_family = parts.first().copied().unwrap_or("Tahoma");
+            let charset_val = parts
+                .get(1)
+                .and_then(|s| s.parse::<u32>().ok())
+                .unwrap_or(1);
+
             // Populate Fonts from OS
             let mut font_names: Vec<String> = Vec::new();
             let hdc = windows::Win32::Graphics::Gdi::GetDC(None);
@@ -524,59 +648,10 @@ impl OcxWindow {
                 );
             }
 
-            // Populate Charsets
-            let charsets = [
-                (w!("Western"), 0),
-                (w!("Default"), 1),
-                (w!("Symbol"), 2),
-                (w!("ShiftJIS"), 128),
-                (w!("Hangul"), 129),
-                (w!("GB2312"), 134),
-                (w!("Big5"), 136),
-                (w!("Greek"), 161),
-                (w!("Turkish"), 162),
-                (w!("Hebrew"), 177),
-                (w!("Arabic"), 178),
-                (w!("Baltic"), 186),
-                (w!("Russian"), 204),
-                (w!("Thai"), 222),
-                (w!("Eastern Europe"), 238),
-                (w!("OEM"), 255),
-            ];
-            for (name, val) in &charsets {
-                let idx = send_message_w(
-                    cb_charset,
-                    windows::Win32::UI::WindowsAndMessaging::CB_ADDSTRING,
-                    WPARAM(0),
-                    LPARAM(name.as_ptr() as isize),
-                )
-                .0 as usize;
-                let _ = send_message_w(
-                    cb_charset,
-                    windows::Win32::UI::WindowsAndMessaging::CB_SETITEMDATA,
-                    WPARAM(idx),
-                    LPARAM(*val as isize),
-                );
-            }
+            // Populate Charsets dynamically based on selected font family
+            update_charset_list(cb_charset, font_family);
 
             // (Color is now an owner-draw button, no population needed)
-
-            // Load from config
-            let manager = crate::config::MSNConfigManager::new(std::path::Path::new("config.toml"));
-            let config = manager.load().unwrap_or_default();
-
-            // Fontname config format: "<fontfamily>;<charset>"
-            let full_font_name = config
-                .settings
-                .fontname
-                .clone()
-                .unwrap_or_else(|| "Tahoma;0".to_string());
-            let parts: Vec<&str> = full_font_name.split(';').collect();
-            let font_family = parts.first().copied().unwrap_or("Tahoma");
-            let charset_val = parts
-                .get(1)
-                .and_then(|s| s.parse::<u32>().ok())
-                .unwrap_or(0);
 
             let font_wstr = windows::core::HSTRING::from(font_family);
             let idx = send_message_w(
@@ -1015,13 +1090,13 @@ impl OcxWindow {
                             .settings
                             .fontname
                             .clone()
-                            .unwrap_or_else(|| "Tahoma;0".to_string());
+                            .unwrap_or_else(|| "Tahoma;1".to_string());
                         let parts: Vec<&str> = full_font_name.split(';').collect();
                         let font_family = parts.first().copied().unwrap_or("Tahoma");
                         let charset_val = parts
                             .get(1)
                             .and_then(|s| s.parse::<u32>().ok())
-                            .unwrap_or(0);
+                            .unwrap_or(1);
 
                         if let Some(cb_font) = this.cb_font {
                             let font_wstr = windows::core::HSTRING::from(font_family);
@@ -1511,6 +1586,16 @@ impl OcxWindow {
                                 } else {
                                     "Tahoma".to_string()
                                 };
+
+                                if id == 2001 {
+                                    update_charset_list(this.cb_charset.unwrap(), &font_name);
+                                    let _ = send_message_w(
+                                        this.cb_charset.unwrap(),
+                                        windows::Win32::UI::WindowsAndMessaging::CB_SETCURSEL,
+                                        WPARAM(0),
+                                        LPARAM(0),
+                                    );
+                                }
 
                                 let charset_idx = send_message_w(
                                     this.cb_charset.unwrap(),
